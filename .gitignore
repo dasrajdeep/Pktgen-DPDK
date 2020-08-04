@@ -19,3 +19,4 @@ lib/lua/build
 Builddir/
 builddir/
 usr/local
+build/

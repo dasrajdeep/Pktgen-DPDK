@@ -3367,6 +3367,28 @@ pattern_set_type(port_info_t *info, char *str)
 		info->fill_pattern_type = ZERO_FILL_PATTERN;
 }
 
+// ACTIVEP4_MOD
+
+void 
+addInstruction(char* datagram, int* offset, char opcode, unsigned short arg, char gotoLabel) {
+    datagram[*offset] = 0;
+    datagram[*offset + 1] = opcode;
+    datagram[*offset + 2] = (arg & 0xFF00) >> 8;
+    datagram[*offset + 3] = arg & 0xFF;
+    datagram[*offset + 4] = gotoLabel;
+    datagram[*offset + 5] = 2;
+    *offset = *offset + 6;
+}
+
+const char* 
+getField(char* line, int num) {
+    const char* tok;
+    for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n")) {
+        if (!--num) return tok;
+    }
+    return NULL;
+}
+
 /**************************************************************************//**
  *
  * pattern_set_user_pattern - Set the user pattern string.
@@ -3392,7 +3414,37 @@ pattern_set_user_pattern(port_info_t *info, char *str)
 		cp++;
 	}
 	memset(info->user_pattern, 0, USER_PATTERN_SIZE);
-	snprintf(info->user_pattern, USER_PATTERN_SIZE, "%s", cp);
+	// Custom user payload based on active program
+	char datagram[USER_PATTERN_SIZE];
+	int* programOffset = (int*) malloc(1 * sizeof(int));
+	memset(datagram, 0, USER_PATTERN_SIZE);
+	datagram[0] = 1;
+    datagram[1] = 0;
+    datagram[2] = 0;
+    datagram[3] = 0;
+    datagram[4] = 2; // FID
+	*programOffset = 12;
+	FILE* fptr = fopen("/tmp/cache_read.txt", "r");
+    if(fptr != NULL) {
+        char opcode, gotoLabel;
+        unsigned short arg;
+        int count = 0;
+        char buf[100];
+        while( fgets(buf, 100, fptr) ) {
+            opcode = (char) atoi(getField(strdup(buf), 1));
+            arg = (unsigned short) atoi(getField(strdup(buf), 2));
+            gotoLabel = (char) atoi(getField(strdup(buf), 3));
+            addInstruction(datagram, programOffset, opcode, arg, gotoLabel);
+            count++;
+        }
+    }
+    fclose(fptr);
+	memcpy(info->user_pattern, datagram, *programOffset);
+	/*int i;
+	for(i = 0; i < *programOffset; i++) pktgen_log_info("[ACTIVEP4] data byte %d : %d", i, datagram[i]);*/
+
+	//snprintf(info->user_pattern, USER_PATTERN_SIZE, "%s", cp);
+	
 	info->fill_pattern_type = USER_FILL_PATTERN;
 }
 

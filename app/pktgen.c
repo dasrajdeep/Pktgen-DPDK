@@ -109,13 +109,18 @@ pktgen_packet_rate(port_info_t *info)
 static __inline__ void
 pktgen_fill_pattern(uint8_t *p, uint32_t len, uint32_t type, char *user)
 {
-	uint32_t i;
+	uint32_t i, datalen;
 
 	switch (type) {
 	case USER_FILL_PATTERN:
 		memset(p, 0, len);
-		for (i = 0; i < len; i++)
-			p[i] = user[i & (USER_PATTERN_SIZE - 1)];
+		datalen = len - 42;
+		datalen = (datalen < USER_PATTERN_SIZE) ? datalen : USER_PATTERN_SIZE;
+		for (i = 42; i < datalen; i++)
+			p[i] = user[i - 42];
+		//for(i = 0; i < 32; i++) pktgen_log_info("[ACTIVEP4] data %d : %d", i, p[i]);
+		/*for (i = 0; i < len; i++)
+			p[i] = user[i & (USER_PATTERN_SIZE - 1)];*/
 		break;
 
 	case NO_FILL_PATTERN:

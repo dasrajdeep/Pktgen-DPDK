@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 #define MAX_PORT_DESC_SIZE  132
-#define USER_PATTERN_SIZE   16
+#define USER_PATTERN_SIZE   256
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
