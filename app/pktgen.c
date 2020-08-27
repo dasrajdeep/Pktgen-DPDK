@@ -117,14 +117,15 @@ static __inline__ void
 pktgen_fill_pattern(uint8_t *p, uint32_t len, uint32_t type, char *user)
 {
 	uint32_t i, datalen;
+	uint32_t HDR_PADDING = 42 + 16;
 
 	switch (type) {
 	case USER_FILL_PATTERN:
 		memset(p, 0, len);
-		datalen = len - 42;
+		datalen = len - HDR_PADDING;
 		datalen = (datalen < USER_PATTERN_SIZE) ? datalen : USER_PATTERN_SIZE;
-		for (i = 42; i < datalen; i++)
-			p[i] = user[i - 42];
+		for (i = HDR_PADDING; i < datalen; i++)
+			p[i] = user[i - HDR_PADDING];
 		//for(i = 0; i < 32; i++) pktgen_log_info("[ACTIVEP4] data %d : %d", i, p[i]);
 		/*for (i = 0; i < len; i++)
 			p[i] = user[i & (USER_PATTERN_SIZE - 1)];*/
@@ -269,6 +270,56 @@ pktgen_tstamp_apply(port_info_t *info __rte_unused,
 	}
 }
 
+static __inline__ pg_active_initial_hdr *
+pktgen_active_pointer(port_info_t *info, struct rte_mbuf *m, int32_t seq_idx)
+{
+	pg_active_initial_hdr *active;
+	char *p;
+
+	p = rte_pktmbuf_mtod(m, char *);
+
+	p += sizeof(struct pg_ether_hdr);
+
+	p += (info->seq_pkt[seq_idx].ethType == PG_ETHER_TYPE_IPv4) ?
+	     sizeof(struct pg_ipv4_hdr) : sizeof(struct pg_ipv6_hdr);
+
+	p += (info->seq_pkt[seq_idx].ipProto == PG_IPPROTO_UDP) ?
+	     sizeof(struct pg_udp_hdr) : sizeof(struct pg_tcp_hdr);
+
+	p += sizeof(tstamp_t);
+
+	active = (pg_active_initial_hdr *)p;
+
+	return active;
+}
+
+static inline void
+pktgen_active_insert(port_info_t *info __rte_unused,
+                     struct rte_mbuf **mbufs, int cnt, int32_t seq_idx)
+{
+	int i, j;
+	for (i = 0; i < cnt; i++) {
+
+		pg_active_initial_hdr *activep4;
+		pg_active_instruction_hdr *instr;
+		activep4 = pktgen_active_pointer(info, mbufs[i], seq_idx);
+
+		activep4->flags = 0x0000;
+		activep4->fid = rte_bswap16(0x0001);
+		activep4->acc = 0x0000;
+		activep4->acc2 = 0x0000;
+		activep4->id = 0x0000;
+		activep4->freq = 0x0000;
+
+		instr =  (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
+
+		for(j = 0; j < info->activep4_len; j++) {
+			rte_memcpy((uint8_t*) instr, (uint8_t*) &info->activep4_instr[j], 5);
+			instr =  (pg_active_instruction_hdr*) ((char*) instr + sizeof(pg_active_instruction_hdr));
+		}
+	}
+}
+
 static inline void
 pktgen_do_tx_tap(port_info_t *info, struct rte_mbuf **mbufs, int cnt)
 {
@@ -317,7 +368,7 @@ pktgen_send_burst(port_info_t *info, uint16_t qid)
 
 	tap = pktgen_tst_port_flags(info, PROCESS_TX_TAP_PKTS);
 	rnd = pktgen_tst_port_flags(info, SEND_RANDOM_PKTS);
-	tstamp = pktgen_tst_port_flags(info, (SEND_LATENCY_PKTS | SEND_RATE_PACKETS));
+	tstamp = pktgen_tst_port_flags(info, (SEND_LATENCY_PKTS | SEND_RATE_PACKETS | SAMPLING_LATENCIES));
 
 	qstats = &info->qstats[qid];
 	qstats->txpkts += cnt;
@@ -330,8 +381,10 @@ pktgen_send_burst(port_info_t *info, uint16_t qid)
 		if (rnd)
 			pktgen_rnd_bits_apply(info, pkts, cnt, NULL);
 
-		if (tstamp)
+		if (tstamp) {
 			pktgen_tstamp_apply(info, pkts, cnt, seq_idx);
+			pktgen_active_insert(info, pkts, cnt, seq_idx);
+		}
 
 		ret = rte_eth_tx_burst(info->pid, qid, pkts, cnt);
 
@@ -361,13 +414,13 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
         seq_idx = RATE_PKT;
     else
         seq_idx = SINGLE_PKT;
-
+	
     for (i = 0; i < nb_pkts; i++) {
-
+		
         if (flags & (SEND_LATENCY_PKTS | SEND_RATE_PACKETS | SAMPLING_LATENCIES)) {
 			tstamp_t *tstamp;
 			tstamp = pktgen_tstamp_pointer(info, pkts[i], seq_idx);
-
+			
 			if (tstamp->magic == TSTAMP_MAGIC) {
 				lat = (rte_rdtsc_precise() - tstamp->timestamp);
 				
@@ -406,7 +459,8 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
                         }
                         else 
                         {	// LATSAMPLER_SIMPLE or LATSAMPLER_UNSPEC
-                            stats->next = now + rte_get_tsc_hz()/info->latsamp_rate;		// Time based
+                            //stats->next = now + rte_get_tsc_hz()/info->latsamp_rate;		// Time based
+							stats->next = now;
                             // stats->next = stats->pkt_counter + info->latsamp_rate;		// Packet count based
                         }
                     }

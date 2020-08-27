@@ -3625,7 +3625,7 @@ pattern_set_user_pattern(port_info_t *info, char *str)
 	}
 	memset(info->user_pattern, 0, USER_PATTERN_SIZE);
 	// Custom user payload based on active program
-	char datagram[USER_PATTERN_SIZE];
+	/*char datagram[USER_PATTERN_SIZE];
 	int* programOffset = (int*) malloc(1 * sizeof(int));
 	memset(datagram, 0, USER_PATTERN_SIZE);
 	datagram[0] = 1;
@@ -3633,27 +3633,33 @@ pattern_set_user_pattern(port_info_t *info, char *str)
     datagram[2] = 0;
     datagram[3] = 0;
     datagram[4] = 2; // FID
-	*programOffset = 12;
+	*programOffset = 12;*/
+	info->activep4_len = 0;
 	FILE* fptr = fopen("/tmp/cache_read.txt", "r");
     if(fptr != NULL) {
         char opcode, gotoLabel;
         unsigned short arg;
-        int count = 0;
+        //int count = 0;
         char buf[100];
         while( fgets(buf, 100, fptr) ) {
             opcode = (char) atoi(getField(strdup(buf), 1));
             arg = (unsigned short) atoi(getField(strdup(buf), 2));
             gotoLabel = (char) atoi(getField(strdup(buf), 3));
-            addInstruction(datagram, programOffset, opcode, arg, gotoLabel);
-            count++;
+			info->activep4_instr[info->activep4_len].flags = 0;
+			info->activep4_instr[info->activep4_len].opcode = opcode;
+			info->activep4_instr[info->activep4_len].args = rte_bswap16(arg);
+			info->activep4_instr[info->activep4_len].label = gotoLabel;
+			info->activep4_len++;
+            //addInstruction(datagram, programOffset, opcode, arg, gotoLabel);
+            //count++;
         }
     }
     fclose(fptr);
-	memcpy(info->user_pattern, datagram, *programOffset);
+	//memcpy(info->user_pattern, datagram, *programOffset);
 	/*int i;
 	for(i = 0; i < *programOffset; i++) pktgen_log_info("[ACTIVEP4] data byte %d : %d", i, datagram[i]);*/
 
-	//snprintf(info->user_pattern, USER_PATTERN_SIZE, "%s", cp);
+	snprintf(info->user_pattern, USER_PATTERN_SIZE, "%s", cp);
 	
 	info->fill_pattern_type = USER_FILL_PATTERN;
 }

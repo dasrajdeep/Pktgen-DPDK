@@ -33,6 +33,7 @@ extern "C" {
 #define USER_PATTERN_SIZE   128
 #define MAX_LATENCY_ENTRIES 50100		// Max 101000?, limited by max allowed size of latsamp_stats_t.data[]
 #define MAX_LATENCY_QUEUES 	10
+#define MAX_ACTIVEP4_LENGTH	256
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -193,12 +194,27 @@ typedef struct {
 
 typedef struct {
     uint64_t data[MAX_LATENCY_ENTRIES];		/** Record for latencies */	
-    uint8_t cfgid[MAX_LATENCY_ENTRIES];		/** Pktcfg id of each latency sampled, if applicable */	
     uint32_t idx;							/**< Index to the latencies array */
     uint64_t next;							/**< Next latency entry */
     uint64_t pkt_counter;					/**< Pkt counter */
     uint32_t num_samples;
 } latsamp_stats_t __rte_cache_aligned;
+
+typedef struct {
+	uint16_t	flags;
+	uint16_t	fid;
+	uint16_t	acc;
+	uint16_t	acc2;
+	uint16_t	id;
+	uint16_t	freq;
+} __attribute__((__packed__)) pg_active_initial_hdr;
+
+typedef struct {
+	uint8_t		flags;
+	uint8_t		opcode;
+	uint16_t	args;
+	uint8_t		label;
+} __attribute__((__packed__)) pg_active_instruction_hdr;
 
 typedef struct port_info_s {
 	uint16_t pid;		/**< Port ID value */
@@ -317,6 +333,11 @@ typedef struct port_info_s {
     uint32_t latsamp_rate;								/**< Sampling rate i.e., samples per second  */
     uint32_t latsamp_num_samples;						/**< Number of samples to collect  */
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
+
+	// ActiveP4
+	pg_active_initial_hdr		activep4_init;
+	pg_active_instruction_hdr	activep4_instr[MAX_ACTIVEP4_LENGTH];
+	uint16_t					activep4_len;
 
 } port_info_t;
 
