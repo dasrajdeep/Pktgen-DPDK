@@ -34,6 +34,7 @@ extern "C" {
 #define MAX_LATENCY_ENTRIES 50100		// Max 101000?, limited by max allowed size of latsamp_stats_t.data[]
 #define MAX_LATENCY_QUEUES 	10
 #define MAX_ACTIVEP4_LENGTH	256
+#define MAX_ZIPF_SIZE		10000
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -335,9 +336,10 @@ typedef struct port_info_s {
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
 
 	// ActiveP4
-	pg_active_initial_hdr		activep4_init;
-	pg_active_instruction_hdr	activep4_instr[MAX_ACTIVEP4_LENGTH];
-	uint16_t					activep4_len;
+	uint64_t					activep4_idx;
+	uint16_t					activep4_zipf_len;
+	uint32_t					activep4_zipf[MAX_ZIPF_SIZE];
+	char						activep4_distfile[128];
 
 } port_info_t;
 

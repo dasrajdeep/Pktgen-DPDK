@@ -294,11 +294,39 @@ pktgen_active_pointer(port_info_t *info, struct rte_mbuf *m, int32_t seq_idx)
 }
 
 static inline void
+pktgen_active_add_instruction(pg_active_instruction_hdr *instr, 
+					 uint8_t flags, uint8_t opcode, uint16_t args, uint8_t label)
+{
+	instr->flags = flags;
+	instr->opcode = opcode;
+	instr->args = rte_bswap16(args);
+	instr->label = label;
+}
+
+static inline void
+pktgen_active_program_cacheread(pg_active_instruction_hdr *instr, uint16_t key)
+{
+	pktgen_active_add_instruction(instr, 0, 2, key, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 7, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 32, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 30, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 22, 0, 2);instr++;
+	pktgen_active_add_instruction(instr, 0, 33, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 24, 0, 2);instr++;
+	pktgen_active_add_instruction(instr, 0, 1, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 0, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 8, 0, 0);instr++;
+}
+
+static inline void
 pktgen_active_insert(port_info_t *info __rte_unused,
                      struct rte_mbuf **mbufs, int cnt, int32_t seq_idx)
 {
-	int i, j;
+	int i;
+	uint16_t key;
 	for (i = 0; i < cnt; i++) {
+
+		info->activep4_idx++;
 
 		pg_active_initial_hdr *activep4;
 		pg_active_instruction_hdr *instr;
@@ -308,15 +336,14 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		activep4->fid = rte_bswap16(0x0001);
 		activep4->acc = 0x0000;
 		activep4->acc2 = 0x0000;
-		activep4->id = 0x0000;
+		activep4->id = rte_bswap16( ((uint16_t) info->activep4_idx) & 0xFFFF );
 		activep4->freq = 0x0000;
 
 		instr =  (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
 
-		for(j = 0; j < info->activep4_len; j++) {
-			rte_memcpy((uint8_t*) instr, (uint8_t*) &info->activep4_instr[j], 5);
-			instr =  (pg_active_instruction_hdr*) ((char*) instr + sizeof(pg_active_instruction_hdr));
-		}
+		key = ((uint32_t) info->activep4_zipf[rand() % info->activep4_zipf_len]) & 0xFFFF;
+
+		pktgen_active_program_cacheread(instr, key);
 	}
 }
 

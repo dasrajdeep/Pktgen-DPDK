@@ -3583,58 +3583,32 @@ pattern_set_type(port_info_t *info, char *str)
 		info->fill_pattern_type = ZERO_FILL_PATTERN;
 }
 
-static inline const char* 
-getField(char* line, int num) {
-    const char* tok;
-    for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n")) {
-        if (!--num) return tok;
-    }
-    return NULL;
-}
-
-/**************************************************************************//**
- *
- * read_default_active_program - Read the default ActiveP4 program.
- *
- * DESCRIPTION
- * Reads the default ActiveP4 from static file.
- *
- * RETURNS: N/A
- *
- * SEE ALSO:
- */
 void
-read_default_active_program(port_info_t *info) 
+read_zipf_dist(port_info_t *info)
 {
-	info->activep4_len = 0;
-	FILE* fptr = fopen("/tmp/cache_read.txt", "r");
+	FILE* fptr = fopen(info->activep4_distfile, "r");
     if(fptr != NULL) {
-        char opcode, gotoLabel;
-        unsigned short arg;
-        char buf[100];
-        while( fgets(buf, 100, fptr) ) {
-            opcode = (char) atoi(getField(strdup(buf), 1));
-            arg = (unsigned short) atoi(getField(strdup(buf), 2));
-            gotoLabel = (char) atoi(getField(strdup(buf), 3));
-			info->activep4_instr[info->activep4_len].flags = 0;
-			info->activep4_instr[info->activep4_len].opcode = opcode;
-			info->activep4_instr[info->activep4_len].args = rte_bswap16(arg);
-			info->activep4_instr[info->activep4_len].label = gotoLabel;
-			info->activep4_len++;
-        }
-    }
-    fclose(fptr);
+        uint32_t datapoint = 0;
+		info->activep4_zipf_len = 0;
+		while(fscanf(fptr, "%d", &datapoint) != EOF && info->activep4_zipf_len < MAX_ZIPF_SIZE) {
+			info->activep4_zipf[info->activep4_zipf_len++] = datapoint;
+		}
+		fclose(fptr);
+    } else {
+		pktgen_log_error("Unable to read zipf distribution file.");
+	}
 }
 
 void
 activep4_set_default_options(port_info_t *info) 
 {
-	single_set_tx_count(info, 10);
+	strcpy(info->activep4_distfile, "zipf_2_10k.csv");
+	read_zipf_dist(info);
+	//single_set_tx_count(info, 10);
 	single_set_pkt_size(info, 128);
 	//single_set_tx_burst(info, 64);
-	read_default_active_program(info);
-	single_set_latsampler_params(info, "poisson", 10, 10, "latency.csv");
-	pktgen_set_capture(info, ENABLE_STATE);
+	single_set_latsampler_params(info, "poisson", 1000, 1000, "latency.csv");
+	//pktgen_set_capture(info, ENABLE_STATE);
 }
 
 /**************************************************************************//**
