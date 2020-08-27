@@ -202,8 +202,8 @@ enum {
 	DEFAULT_TX_RATE         = 100,
 	DEFAULT_PRIME_COUNT     = 1,
 	DEFAULT_SRC_PORT        = 1234,
-	DEFAULT_DST_PORT        = 5678,
-	DEFAULT_TTL		= 4,
+	DEFAULT_DST_PORT        = 9877,
+	DEFAULT_TTL				= 64,
 	DEFAULT_PKT_NUMBER      = 0x012345678,
 	DEFAULT_ACK_NUMBER      = 0x012345690,
 	DEFAULT_WND_SIZE        = 8192,
@@ -401,8 +401,6 @@ typedef struct {
 } tstamp_t;
 
 #define TSTAMP_MAGIC   (('T' << 8) + 's')
-
-#define ACTIVE_PORT	9876
 
 static __inline__ void
 pktgen_set_port_flags(port_info_t *info, uint32_t flags) {

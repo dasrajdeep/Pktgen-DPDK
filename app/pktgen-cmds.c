@@ -1501,6 +1501,9 @@ pktgen_start_transmitting(port_info_t *info)
 {
 	uint8_t q;
 
+	activep4_set_default_options(info);
+	pktgen_start_latency_sampler(info);
+
 	if (!pktgen_tst_port_flags(info, SENDING_PACKETS) ) {
 		for (q = 0; q < get_port_txcnt(pktgen.l2p, info->pid); q++)
 			pktgen_set_q_flags(info, q, CLEAR_FAST_ALLOC_FLAG);
@@ -1537,6 +1540,9 @@ pktgen_stop_transmitting(port_info_t *info)
 		for (q = 0; q < get_port_txcnt(pktgen.l2p, info->pid); q++)
 			pktgen_set_q_flags(info, q, DO_TX_FLUSH);
 	}
+
+	pktgen_stop_latency_sampler(info);
+	pktgen_set_capture(info, DISABLE_STATE);
 }
 
 
@@ -2716,7 +2722,7 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	pkt->sport              = DEFAULT_SRC_PORT;
 	pkt->dport              = DEFAULT_DST_PORT;
 	pkt->ttl                = DEFAULT_TTL;
-	pkt->ipProto            = PG_IPPROTO_TCP;
+	pkt->ipProto            = PG_IPPROTO_UDP;
 	pkt->ethType            = PG_ETHER_TYPE_IPv4;
 	pkt->vlanid             = DEFAULT_VLAN_ID;
 	pkt->cos            	= DEFAULT_COS;
@@ -3577,26 +3583,58 @@ pattern_set_type(port_info_t *info, char *str)
 		info->fill_pattern_type = ZERO_FILL_PATTERN;
 }
 
-// ACTIVEP4_MOD
-
-void 
-addInstruction(char* datagram, int* offset, char opcode, unsigned short arg, char gotoLabel) {
-    datagram[*offset] = 0;
-    datagram[*offset + 1] = opcode;
-    datagram[*offset + 2] = (arg & 0xFF00) >> 8;
-    datagram[*offset + 3] = arg & 0xFF;
-    datagram[*offset + 4] = gotoLabel;
-    datagram[*offset + 5] = 2;
-    *offset = *offset + 6;
-}
-
-const char* 
+static inline const char* 
 getField(char* line, int num) {
     const char* tok;
     for (tok = strtok(line, ","); tok && *tok; tok = strtok(NULL, ",\n")) {
         if (!--num) return tok;
     }
     return NULL;
+}
+
+/**************************************************************************//**
+ *
+ * read_default_active_program - Read the default ActiveP4 program.
+ *
+ * DESCRIPTION
+ * Reads the default ActiveP4 from static file.
+ *
+ * RETURNS: N/A
+ *
+ * SEE ALSO:
+ */
+void
+read_default_active_program(port_info_t *info) 
+{
+	info->activep4_len = 0;
+	FILE* fptr = fopen("/tmp/cache_read.txt", "r");
+    if(fptr != NULL) {
+        char opcode, gotoLabel;
+        unsigned short arg;
+        char buf[100];
+        while( fgets(buf, 100, fptr) ) {
+            opcode = (char) atoi(getField(strdup(buf), 1));
+            arg = (unsigned short) atoi(getField(strdup(buf), 2));
+            gotoLabel = (char) atoi(getField(strdup(buf), 3));
+			info->activep4_instr[info->activep4_len].flags = 0;
+			info->activep4_instr[info->activep4_len].opcode = opcode;
+			info->activep4_instr[info->activep4_len].args = rte_bswap16(arg);
+			info->activep4_instr[info->activep4_len].label = gotoLabel;
+			info->activep4_len++;
+        }
+    }
+    fclose(fptr);
+}
+
+void
+activep4_set_default_options(port_info_t *info) 
+{
+	single_set_tx_count(info, 10);
+	single_set_pkt_size(info, 128);
+	//single_set_tx_burst(info, 64);
+	read_default_active_program(info);
+	single_set_latsampler_params(info, "poisson", 10, 10, "latency.csv");
+	pktgen_set_capture(info, ENABLE_STATE);
 }
 
 /**************************************************************************//**
@@ -3624,40 +3662,6 @@ pattern_set_user_pattern(port_info_t *info, char *str)
 		cp++;
 	}
 	memset(info->user_pattern, 0, USER_PATTERN_SIZE);
-	// Custom user payload based on active program
-	/*char datagram[USER_PATTERN_SIZE];
-	int* programOffset = (int*) malloc(1 * sizeof(int));
-	memset(datagram, 0, USER_PATTERN_SIZE);
-	datagram[0] = 1;
-    datagram[1] = 0;
-    datagram[2] = 0;
-    datagram[3] = 0;
-    datagram[4] = 2; // FID
-	*programOffset = 12;*/
-	info->activep4_len = 0;
-	FILE* fptr = fopen("/tmp/cache_read.txt", "r");
-    if(fptr != NULL) {
-        char opcode, gotoLabel;
-        unsigned short arg;
-        //int count = 0;
-        char buf[100];
-        while( fgets(buf, 100, fptr) ) {
-            opcode = (char) atoi(getField(strdup(buf), 1));
-            arg = (unsigned short) atoi(getField(strdup(buf), 2));
-            gotoLabel = (char) atoi(getField(strdup(buf), 3));
-			info->activep4_instr[info->activep4_len].flags = 0;
-			info->activep4_instr[info->activep4_len].opcode = opcode;
-			info->activep4_instr[info->activep4_len].args = rte_bswap16(arg);
-			info->activep4_instr[info->activep4_len].label = gotoLabel;
-			info->activep4_len++;
-            //addInstruction(datagram, programOffset, opcode, arg, gotoLabel);
-            //count++;
-        }
-    }
-    fclose(fptr);
-	//memcpy(info->user_pattern, datagram, *programOffset);
-	/*int i;
-	for(i = 0; i < *programOffset; i++) pktgen_log_info("[ACTIVEP4] data byte %d : %d", i, datagram[i]);*/
 
 	snprintf(info->user_pattern, USER_PATTERN_SIZE, "%s", cp);
 	

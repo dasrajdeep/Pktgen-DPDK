@@ -48,6 +48,7 @@ void pktgen_clear_display(void);
 void pktgen_start_stop_latency_sampler(port_info_t *info, uint32_t state);
 void pktgen_start_latency_sampler(port_info_t *info);
 void pktgen_stop_latency_sampler(port_info_t *info);
+void activep4_set_default_options(port_info_t *info);
 
 int pktgen_save(char *path);
 void pktgen_cls(void);
