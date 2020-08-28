@@ -2717,6 +2717,7 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	port_info_t *info = &pktgen.info[pid];
 	pkt_seq_t *pkt = &info->seq_pkt[seq];
 	port_info_t *dst_info;
+	int i;
 
 	pkt->pktSize            = MIN_PKT_SIZE;
 	pkt->sport              = DEFAULT_SRC_PORT;
@@ -2739,6 +2740,19 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	info->seqIdx            = 0;
 	info->prime_cnt         = DEFAULT_PRIME_COUNT;
 	info->delta             = 0;
+
+	strcpy(info->activep4_distfile, "");
+	info->activep4_idx		= 0;
+	info->activep4_zipf_len	= 0;
+	for(i = 0; i < MAX_FID; i++) {
+		info->activep4_lastallocreq[i] = 0;
+		info->activep4_memfaults[i] = 0;
+		info->activep4_segfault[i] = 0;
+		info->activep4_memallocations[i].fid = i + 1;
+		info->activep4_memallocations[i].mem_start = 0;
+		info->activep4_memallocations[i].mem_end = 0xFFFF;
+		info->activep4_memallocations[i].pagemask = 0xFFFF;
+	}
 
 	pkt->ip_mask = DEFAULT_NETMASK;
 	if ( (pid & 1) == 0) {

@@ -920,11 +920,9 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	if(allocated_flag == 1) {
 		mem_start = rte_bswap16(active->acc);
 		mem_end = rte_bswap16(active->acc2);
-		info->activep4_memallocations[fid].fid = fid;
 		info->activep4_memallocations[fid].mem_start = mem_start;
 		info->activep4_memallocations[fid].mem_end = mem_end;
-		info->activep4_memallocations[fid].pagesize = mem_end - mem_start + 1;
-		info->activep4_memallocations[fid].pagemask = info->activep4_memallocations[fid].pagesize - 1;
+		info->activep4_memallocations[fid].pagemask = mem_end - mem_start;
 		info->activep4_segfault[fid] = 0;
 	}
 }
