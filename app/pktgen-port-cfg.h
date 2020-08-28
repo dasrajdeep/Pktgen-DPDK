@@ -35,6 +35,8 @@ extern "C" {
 #define MAX_LATENCY_QUEUES 	10
 #define MAX_ACTIVEP4_LENGTH	256
 #define MAX_ZIPF_SIZE		10000
+#define MAX_FID				8
+#define MAX_FID_MASK		0x00000007
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -217,6 +219,14 @@ typedef struct {
 	uint8_t		label;
 } __attribute__((__packed__)) pg_active_instruction_hdr;
 
+typedef struct {
+	uint16_t	fid;
+	uint16_t	mem_start;
+	uint16_t	mem_end;
+	uint16_t	pagesize;
+	uint16_t	pagemask;
+} pg_active_memalloc_t;
+
 typedef struct port_info_s {
 	uint16_t pid;		/**< Port ID value */
 	uint16_t tx_burst;	/**< Number of TX burst packets */
@@ -335,11 +345,20 @@ typedef struct port_info_s {
     uint32_t latsamp_num_samples;						/**< Number of samples to collect  */
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
 
-	// ActiveP4
+	// ActiveP4 generic
 	uint64_t					activep4_idx;
 	uint16_t					activep4_zipf_len;
 	uint32_t					activep4_zipf[MAX_ZIPF_SIZE];
 	char						activep4_distfile[128];
+
+	// ActiveP4 memory allocation
+	pg_active_memalloc_t	activep4_memallocations[MAX_FID];
+	uint8_t					activep4_segfault[MAX_FID];
+	uint64_t				activep4_lastallocreq[MAX_FID];
+
+	// ActiveP4 experiments
+	latsamp_stats_t		activep4_rtt[MAX_FID];
+	uint64_t			activep4_memfaults[MAX_FID];
 
 } port_info_t;
 

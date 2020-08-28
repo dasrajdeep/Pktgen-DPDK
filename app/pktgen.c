@@ -304,9 +304,9 @@ pktgen_active_add_instruction(pg_active_instruction_hdr *instr,
 }
 
 static inline void
-pktgen_active_program_cacheread(pg_active_instruction_hdr *instr, uint16_t key)
+pktgen_active_program_cacheread(pg_active_instruction_hdr *instr, uint16_t memaddr)
 {
-	pktgen_active_add_instruction(instr, 0, 2, key, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 2, memaddr, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 7, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 32, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 30, 0, 0);instr++;
@@ -323,27 +323,31 @@ pktgen_active_insert(port_info_t *info __rte_unused,
                      struct rte_mbuf **mbufs, int cnt, int32_t seq_idx)
 {
 	int i;
-	uint16_t key;
+	uint16_t key, fid, flags, memaddr;
 	for (i = 0; i < cnt; i++) {
 
 		info->activep4_idx++;
+
+		fid = (uint16_t) (info->activep4_idx & MAX_FID_MASK); // skip FIDs with pending memfaults?
+		flags = (info->activep4_segfault[fid] == 1) ? 0x0020 : 0x0000;
 
 		pg_active_initial_hdr *activep4;
 		pg_active_instruction_hdr *instr;
 		activep4 = pktgen_active_pointer(info, mbufs[i], seq_idx);
 
-		activep4->flags = 0x0000;
-		activep4->fid = rte_bswap16(0x0001);
+		activep4->flags = rte_bswap16(flags);
+		activep4->fid = rte_bswap16(fid);
 		activep4->acc = 0x0000;
 		activep4->acc2 = 0x0000;
 		activep4->id = rte_bswap16( ((uint16_t) info->activep4_idx) & 0xFFFF );
 		activep4->freq = 0x0000;
 
-		instr =  (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
-
-		key = ((uint32_t) info->activep4_zipf[rand() % info->activep4_zipf_len]) & 0xFFFF;
-
-		pktgen_active_program_cacheread(instr, key);
+		if(flags == 0) {
+			instr =  (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
+			key = ((uint32_t) info->activep4_zipf[rand() % info->activep4_zipf_len]) & 0xFFFF;
+			memaddr = info->activep4_memallocations[fid].mem_start + (key & info->activep4_memallocations[fid].pagemask);
+			pktgen_active_program_cacheread(instr, memaddr);
+		}
 	}
 }
 
@@ -814,6 +818,10 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	uint32_t plen;
 	uint32_t flags;
 	pktType_e pType;
+	pg_active_initial_hdr *active;
+	char *p;
+	uint8_t memfault_flag, allocated_flag;
+	uint16_t fid, mem_start, mem_end;
 
 	pType = pktgen_packet_type(m);
 
@@ -896,6 +904,28 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 			info->sizes.broadcast++;
 		else if ( ((uint8_t *)m->buf_addr + m->data_off)[0] & 1)
 			info->sizes.multicast++;
+	}
+
+	// ActiveP4 packets
+	p = rte_pktmbuf_mtod(m, char *);
+	p += sizeof(struct pg_ether_hdr) + sizeof(struct pg_ipv4_hdr) + sizeof(struct pg_udp_hdr) + sizeof(tstamp_t);
+	active = (pg_active_initial_hdr *)p;
+	fid = rte_bswap16(active->fid);
+	memfault_flag = (rte_bswap16(active->flags) & 0x0080) >> 7;
+	allocated_flag = (rte_bswap16(active->flags) & 0x0010) >> 4;
+	if(memfault_flag == 1 && fid < MAX_FID) {
+		info->activep4_segfault[fid] = 1;
+		info->activep4_memfaults[fid]++;
+	}
+	if(allocated_flag == 1) {
+		mem_start = rte_bswap16(active->acc);
+		mem_end = rte_bswap16(active->acc2);
+		info->activep4_memallocations[fid].fid = fid;
+		info->activep4_memallocations[fid].mem_start = mem_start;
+		info->activep4_memallocations[fid].mem_end = mem_end;
+		info->activep4_memallocations[fid].pagesize = mem_end - mem_start + 1;
+		info->activep4_memallocations[fid].pagemask = info->activep4_memallocations[fid].pagesize - 1;
+		info->activep4_segfault[fid] = 0;
 	}
 }
 

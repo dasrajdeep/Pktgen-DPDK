@@ -3604,11 +3604,10 @@ activep4_set_default_options(port_info_t *info)
 {
 	strcpy(info->activep4_distfile, "zipf_2_10k.csv");
 	read_zipf_dist(info);
-	//single_set_tx_count(info, 10);
+	single_set_tx_count(info, 10);
 	single_set_pkt_size(info, 128);
-	//single_set_tx_burst(info, 64);
 	single_set_latsampler_params(info, "poisson", 1000, 1000, "latency.csv");
-	//pktgen_set_capture(info, ENABLE_STATE);
+	pktgen_set_capture(info, ENABLE_STATE);
 }
 
 /**************************************************************************//**
