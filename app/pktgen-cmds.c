@@ -1669,7 +1669,6 @@ pktgen_stop_latency_sampler(port_info_t *info)
 		else
 		{
 			pktgen_log_info("Writing to file %s", info->activep4_stats[j].latsamp_stats.outfile);
-			fprintf(outfile, "Latency\n");
 			count = 0;
 			for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
 				fprintf(outfile,"%" PRIu64 "\n", info->activep4_stats[j].latsamp_stats.data[i]); 
@@ -3639,6 +3638,7 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].keydist = KEYDIST_LINEAR;
 	}
 	single_set_pkt_size(info, 128);
+	single_set_tx_burst(info, 1);
 	//single_set_tx_count(info, 10);
 	//pktgen_set_capture(info, ENABLE_STATE);
 }
