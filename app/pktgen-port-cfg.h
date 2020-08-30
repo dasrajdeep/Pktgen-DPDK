@@ -35,8 +35,11 @@ extern "C" {
 #define MAX_LATENCY_QUEUES 	10
 #define MAX_ACTIVEP4_LENGTH	256
 #define MAX_ZIPF_SIZE		10000
-#define MAX_FID				8
+#define MAX_FID				4
 #define MAX_FID_MASK		0x00000007
+#define KEYDIST_ZIPF		0
+#define KEYDIST_LINEAR		1
+#define KEYDIST_UNIFORM		2
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -196,11 +199,12 @@ typedef struct {
 } rate_info_t;
 
 typedef struct {
-    uint64_t data[MAX_LATENCY_ENTRIES];		/** Record for latencies */	
-    uint32_t idx;							/**< Index to the latencies array */
-    uint64_t next;							/**< Next latency entry */
-    uint64_t pkt_counter;					/**< Pkt counter */
-    uint32_t num_samples;
+    uint64_t 	data[MAX_LATENCY_ENTRIES];		/** Record for latencies */	
+    uint32_t 	idx;							/**< Index to the latencies array */
+    uint64_t 	next;							/**< Next latency entry */
+    uint64_t 	pkt_counter;					/**< Pkt counter */
+    uint32_t 	num_samples;
+	char 		outfile[256];
 } latsamp_stats_t __rte_cache_aligned;
 
 typedef struct {
@@ -225,6 +229,19 @@ typedef struct {
 	uint16_t	mem_end;
 	uint16_t	pagemask;
 } pg_active_memalloc_t;
+
+typedef struct {
+	uint64_t				idx;
+	uint16_t				zipf_len;
+	uint32_t				zipf[MAX_ZIPF_SIZE];
+	char					distfile[128];
+	uint8_t					keydist;
+	pg_active_memalloc_t	memallocation;
+	uint8_t					segfault;
+	uint64_t				lastallocreq;
+	latsamp_stats_t 		latsamp_stats;
+	uint64_t 				memfaults;
+} activep4_t __rte_cache_aligned;
 
 typedef struct port_info_s {
 	uint16_t pid;		/**< Port ID value */
@@ -344,20 +361,8 @@ typedef struct port_info_s {
     uint32_t latsamp_num_samples;						/**< Number of samples to collect  */
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
 
-	// ActiveP4 generic
-	uint64_t					activep4_idx;
-	uint16_t					activep4_zipf_len;
-	uint32_t					activep4_zipf[MAX_ZIPF_SIZE];
-	char						activep4_distfile[128];
-
-	// ActiveP4 memory allocation
-	pg_active_memalloc_t	activep4_memallocations[MAX_FID];
-	uint8_t					activep4_segfault[MAX_FID];
-	uint64_t				activep4_lastallocreq[MAX_FID];
-
 	// ActiveP4 experiments
-	latsamp_stats_t		activep4_rtt[MAX_FID];
-	uint64_t			activep4_memfaults[MAX_FID];
+	activep4_t	activep4_stats[MAX_FID];
 
 } port_info_t;
 

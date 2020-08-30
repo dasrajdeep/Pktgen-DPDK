@@ -1542,7 +1542,7 @@ pktgen_stop_transmitting(port_info_t *info)
 	}
 
 	pktgen_stop_latency_sampler(info);
-	pktgen_set_capture(info, DISABLE_STATE);
+	//pktgen_set_capture(info, DISABLE_STATE);
 }
 
 
@@ -1583,7 +1583,7 @@ pktgen_start_stop_latency_sampler(port_info_t *info, uint32_t state)
 void
 pktgen_start_latency_sampler(port_info_t *info)
 {
-    uint16_t q, rxq;
+    uint16_t q;
 
     /* Start sampler */
     if (pktgen_tst_port_flags(info, SAMPLING_LATENCIES)) {
@@ -1604,19 +1604,19 @@ pktgen_start_latency_sampler(port_info_t *info)
         return;
     }
 
-    rxq = get_port_rxcnt(pktgen.l2p, info->pid);
+    /*rxq = get_port_rxcnt(pktgen.l2p, info->pid);
     if (rxq == 0 || rxq > MAX_LATENCY_QUEUES) {
         pktgen_log_error("no rx queues or rx queues over limit (%d) to sample on this port!", MAX_LATENCY_QUEUES);
         return;
-    }
+    }*/
 
-    for (q = 0; q < rxq; q++)
+    for (q = 0; q < MAX_FID; q++)
     {
-        info->latsamp_stats[q].pkt_counter = 0;
-        info->latsamp_stats[q].next = 0;
-        info->latsamp_stats[q].idx = 0;
-        info->latsamp_stats[q].num_samples = info->latsamp_num_samples / rxq;
-        pktgen_log_info("Assigning %d sample latencies to queue %d", info->latsamp_num_samples / rxq, q);
+        info->activep4_stats[q].latsamp_stats.pkt_counter = 0;
+        info->activep4_stats[q].latsamp_stats.next = 0;
+        info->activep4_stats[q].latsamp_stats.idx = 0;
+        info->activep4_stats[q].latsamp_stats.num_samples = info->latsamp_num_samples;
+        pktgen_log_info("Assigning %d sample latencies to FID %d", info->latsamp_num_samples, q);
     }
 
     if (info->seq_pkt[SINGLE_PKT].pktSize < (PG_ETHER_MIN_LEN - PG_ETHER_CRC_LEN) + sizeof(tstamp_t)) {
@@ -1648,8 +1648,9 @@ void
 pktgen_stop_latency_sampler(port_info_t *info)
 {
     FILE * outfile;
-    uint32_t i, count;
-    uint16_t q, rxq = get_port_rxcnt(pktgen.l2p, info->pid);
+    uint32_t i, count, j;
+    uint16_t q;
+	//uint16_t rxq = get_port_rxcnt(pktgen.l2p, info->pid);
 
     if (pktgen_tst_port_flags(info, SAMPLING_LATENCIES) == 0) {
         pktgen_log_info("Latency sampler is not running, nothing to do!");
@@ -1660,33 +1661,32 @@ pktgen_stop_latency_sampler(port_info_t *info)
     pktgen_clr_port_flags(info, SAMPLING_LATENCIES);
 
     /* Dump stats to file */
-    outfile = fopen(info->latsamp_outfile, "w");
-    if (outfile == NULL)
-    {
-        pktgen_log_error("Cannot open the latcol outfile!");
-    }
-    else {
-        pktgen_log_info("Writing to file %s", info->latsamp_outfile);
-        fprintf(outfile, "Latency\n");
-        for (q = 0, count = 0; q < rxq; q++)
-        {
-            pktgen_log_info("Writing sample latencies of queue %d", q);	
-            for (i = 0; i < info->latsamp_stats[q].idx; i++){
-                fprintf(outfile,"%" PRIu64 "\n", info->latsamp_stats[q].data[i]); 
-                count++;
-            }
-        }
-        fclose(outfile);
-        pktgen_log_warning("Wrote %d sample latencies to file %s", count, info->latsamp_outfile);
-    }
+	for(j = 0; j < MAX_FID; j++)
+	{
+		outfile = fopen(info->activep4_stats[j].latsamp_stats.outfile, "w");
+		if (outfile == NULL)
+			pktgen_log_error("Cannot open the latcol outfile!");
+		else
+		{
+			pktgen_log_info("Writing to file %s", info->activep4_stats[j].latsamp_stats.outfile);
+			fprintf(outfile, "Latency\n");
+			count = 0;
+			for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
+				fprintf(outfile,"%" PRIu64 "\n", info->activep4_stats[j].latsamp_stats.data[i]); 
+				count++;
+			}
+			fclose(outfile);
+			pktgen_log_warning("Wrote %d sample latencies to file %s", count, info->activep4_stats[j].latsamp_stats.outfile);
+		}
+	}
 
     /* Reset stats data */
-    for (q = 0; q < rxq; q++)
+    for (q = 0; q < MAX_FID; q++)
     {
-        info->latsamp_stats[q].pkt_counter = 0;
-        info->latsamp_stats[q].next = 0;
-        info->latsamp_stats[q].idx = 0;
-        info->latsamp_stats[q].num_samples = 0;
+        info->activep4_stats[j].latsamp_stats.pkt_counter = 0;
+        info->activep4_stats[j].latsamp_stats.next = 0;
+        info->activep4_stats[j].latsamp_stats.idx = 0;
+        info->activep4_stats[j].latsamp_stats.num_samples = 0;
     }
     
     if (info->seq_pkt[SINGLE_PKT].pktSize >= (PG_ETHER_MIN_LEN - PG_ETHER_CRC_LEN) + sizeof(tstamp_t)) {
@@ -2741,17 +2741,18 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	info->prime_cnt         = DEFAULT_PRIME_COUNT;
 	info->delta             = 0;
 
-	strcpy(info->activep4_distfile, "");
-	info->activep4_idx		= 0;
-	info->activep4_zipf_len	= 0;
 	for(i = 0; i < MAX_FID; i++) {
-		info->activep4_lastallocreq[i] = 0;
-		info->activep4_memfaults[i] = 0;
-		info->activep4_segfault[i] = 0;
-		info->activep4_memallocations[i].fid = i + 1;
-		info->activep4_memallocations[i].mem_start = 0;
-		info->activep4_memallocations[i].mem_end = 0xFFFF;
-		info->activep4_memallocations[i].pagemask = 0xFFFF;
+		strcpy(info->activep4_stats[i].distfile, "");
+		info->activep4_stats[i].idx		= 0;
+		info->activep4_stats[i].zipf_len	= 0;
+		info->activep4_stats[i].keydist	= KEYDIST_LINEAR;
+		info->activep4_stats[i].lastallocreq = 0;
+		info->activep4_stats[i].memfaults = 0;
+		info->activep4_stats[i].segfault = 0;
+		info->activep4_stats[i].memallocation.fid = i + 1;
+		info->activep4_stats[i].memallocation.mem_start = 0;
+		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
+		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 	}
 
 	pkt->ip_mask = DEFAULT_NETMASK;
@@ -3598,14 +3599,14 @@ pattern_set_type(port_info_t *info, char *str)
 }
 
 void
-read_zipf_dist(port_info_t *info)
+read_zipf_dist(port_info_t *info, int fid)
 {
-	FILE* fptr = fopen(info->activep4_distfile, "r");
+	FILE* fptr = fopen(info->activep4_stats[fid].distfile, "r");
     if(fptr != NULL) {
         uint32_t datapoint = 0;
-		info->activep4_zipf_len = 0;
-		while(fscanf(fptr, "%d", &datapoint) != EOF && info->activep4_zipf_len < MAX_ZIPF_SIZE) {
-			info->activep4_zipf[info->activep4_zipf_len++] = datapoint;
+		info->activep4_stats[fid].zipf_len = 0;
+		while(fscanf(fptr, "%d", &datapoint) != EOF && info->activep4_stats[fid].zipf_len < MAX_ZIPF_SIZE) {
+			info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++] = datapoint;
 		}
 		fclose(fptr);
     } else {
@@ -3616,12 +3617,30 @@ read_zipf_dist(port_info_t *info)
 void
 activep4_set_default_options(port_info_t *info) 
 {
-	strcpy(info->activep4_distfile, "zipf_2_10k.csv");
-	read_zipf_dist(info);
-	single_set_tx_count(info, 10);
+	int i;
+	for(i = 0; i < MAX_FID; i++) {
+		strcpy(info->activep4_stats[i].distfile, "");
+		info->activep4_stats[i].idx		= 0;
+		info->activep4_stats[i].zipf_len	= 0;
+		info->activep4_stats[i].keydist	= KEYDIST_LINEAR;
+		info->activep4_stats[i].lastallocreq = 0;
+		info->activep4_stats[i].memfaults = 0;
+		info->activep4_stats[i].segfault = 0;
+		info->activep4_stats[i].memallocation.fid = i + 1;
+		info->activep4_stats[i].memallocation.mem_start = 0;
+		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
+		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
+	}
+	for(i = 0; i < MAX_FID; i++) {
+		single_set_latsampler_params(info, "simple", 10000, 1000, "latency.csv");
+		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
+		strcpy(info->activep4_stats[i].distfile, "zipf_2_10k.csv");
+		read_zipf_dist(info, i);
+		info->activep4_stats[i].keydist = KEYDIST_LINEAR;
+	}
 	single_set_pkt_size(info, 128);
-	single_set_latsampler_params(info, "poisson", 1000, 1000, "latency.csv");
-	pktgen_set_capture(info, ENABLE_STATE);
+	//single_set_tx_count(info, 10);
+	//pktgen_set_capture(info, ENABLE_STATE);
 }
 
 /**************************************************************************//**
