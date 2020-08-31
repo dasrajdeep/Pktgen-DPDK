@@ -361,8 +361,9 @@ typedef struct port_info_s {
     uint32_t latsamp_num_samples;						/**< Number of samples to collect  */
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
 
-	// ActiveP4 experiments
-	activep4_t	activep4_stats[MAX_FID];
+	// ActiveP4
+	activep4_t	activep4_stats[10];
+	uint32_t	activep4_init_packets;
 
 } port_info_t;
 

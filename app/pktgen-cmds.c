@@ -3617,7 +3617,7 @@ void
 activep4_set_default_options(port_info_t *info) 
 {
 	int i;
-	for(i = 0; i < MAX_FID; i++) {
+	for(i = 0; i < 10; i++) {
 		strcpy(info->activep4_stats[i].distfile, "");
 		info->activep4_stats[i].idx		= 0;
 		info->activep4_stats[i].zipf_len	= 0;
@@ -3630,7 +3630,8 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
 		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 	}
-	for(i = 0; i < MAX_FID; i++) {
+	info->activep4_init_packets = 0;
+	for(i = 0; i < 10; i++) {
 		single_set_latsampler_params(info, "simple", 10000, 1000, "latency.csv");
 		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
 		strcpy(info->activep4_stats[i].distfile, "zipf_2_10k.csv");

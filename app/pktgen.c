@@ -308,11 +308,23 @@ pktgen_active_program_cacheread(pg_active_instruction_hdr *instr, uint16_t memad
 {
 	pktgen_active_add_instruction(instr, 0, 2, memaddr, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 7, 0, 0);instr++;
-	pktgen_active_add_instruction(instr, 0, 32, 0, 0);instr++;
-	pktgen_active_add_instruction(instr, 0, 30, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 4, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 22, 0, 2);instr++;
+	pktgen_active_add_instruction(instr, 0, 20, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 33, 0, 2);instr++;
+	pktgen_active_add_instruction(instr, 0, 1, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 0, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 8, 0, 0);instr++;
+}
+
+static inline void
+pktgen_active_program_cachewrite(pg_active_instruction_hdr *instr, uint16_t memaddr)
+{
+	pktgen_active_add_instruction(instr, 0, 2, memaddr, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 12, 255, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 5, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 30, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 33, 0, 0);instr++;
-	pktgen_active_add_instruction(instr, 0, 24, 0, 2);instr++;
 	pktgen_active_add_instruction(instr, 0, 1, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 0, 0, 0);instr++;
 	pktgen_active_add_instruction(instr, 0, 8, 0, 0);instr++;
@@ -341,7 +353,9 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 
 		info->activep4_stats[core_id].idx++;
 
-		fid  = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
+		if(info->activep4_init_packets < 65536) fid = 9;
+		else fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
+		
 		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
 
 		pg_active_initial_hdr *activep4;
@@ -358,8 +372,12 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		if(flags == 0) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
 			key = pktgen_active_get_key(info, core_id);
-			memaddr = info->activep4_stats[core_id].memallocation.mem_start + (key & info->activep4_stats[core_id].memallocation.pagemask);
-			pktgen_active_program_cacheread(instr, memaddr);
+			//key = 1;
+			memaddr = info->activep4_stats[fid].memallocation.mem_start + (key & info->activep4_stats[fid].memallocation.pagemask);
+			if(info->activep4_init_packets < 65536) {
+				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
+				info->activep4_init_packets++;
+			} else pktgen_active_program_cacheread(instr, memaddr);
 		}
 	}
 }
@@ -448,6 +466,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
     int lid = rte_lcore_id() / 2 - 1;
     //int qid = get_rxque(pktgen.l2p, lid, info->pid);
     int i;
+	uint8_t memfault_flag;
     uint64_t lat, jitter;
 
     flags = rte_atomic32_read(&info->port_flags);
@@ -467,6 +486,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			pg_active_initial_hdr *activep4hdr;
 			activep4hdr = pktgen_active_pointer(info, pkts[i], seq_idx);
 			lid = rte_bswap16(activep4hdr->fid) - 1;
+			memfault_flag = (rte_bswap16(activep4hdr->flags) & 0x0080) >> 7;
 			
 			if (tstamp->magic == TSTAMP_MAGIC) {
 				lat = (rte_rdtsc_precise() - tstamp->timestamp);
@@ -490,7 +510,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
                     latsamp_stats_t* stats = &info->activep4_stats[lid].latsamp_stats;
                     uint64_t now = rte_rdtsc_precise();
                     stats->pkt_counter++;
-                    if (stats->next == 0 || now >= stats->next) {
+                    if ((stats->next == 0 || now >= stats->next) && memfault_flag == 0) {
 
                         if (stats->idx < stats->num_samples) {
                             stats->data[stats->idx] = lat * 1000000000 / rte_get_tsc_hz();		/* Do we want to keep it as cycles? */
@@ -838,7 +858,7 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	char *p;
 	uint8_t memfault_flag, allocated_flag;
 	uint16_t fid, mem_start, mem_end;
-	int core_id = rte_lcore_id();
+	//int core_id = rte_lcore_id() / 2 - 1;
 
 	pType = pktgen_packet_type(m);
 
@@ -924,23 +944,25 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	}
 
 	// ActiveP4 packets
+	info->sizes._512_1023 = info->activep4_init_packets;
 	p = rte_pktmbuf_mtod(m, char *);
 	p += sizeof(struct pg_ether_hdr) + sizeof(struct pg_ipv4_hdr) + sizeof(struct pg_udp_hdr) + sizeof(tstamp_t);
 	active = (pg_active_initial_hdr *)p;
-	fid = rte_bswap16(active->fid);
+	fid = rte_bswap16(active->fid) - 1;
 	memfault_flag = (rte_bswap16(active->flags) & 0x0080) >> 7;
 	allocated_flag = (rte_bswap16(active->flags) & 0x0010) >> 4;
 	if(memfault_flag == 1 && fid < MAX_FID) {
-		info->activep4_stats[core_id].segfault = 1;
-		info->activep4_stats[core_id].memfaults++;
+		info->activep4_stats[fid].segfault = 1;
+		info->activep4_stats[fid].memfaults++;
+		info->sizes._1024_1518++;
 	}
 	if(allocated_flag == 1) {
 		mem_start = rte_bswap16(active->acc);
 		mem_end = rte_bswap16(active->acc2);
-		info->activep4_stats[core_id].memallocation.mem_start = mem_start;
-		info->activep4_stats[core_id].memallocation.mem_end = mem_end;
-		info->activep4_stats[core_id].memallocation.pagemask = mem_end - mem_start;
-		info->activep4_stats[core_id].segfault = 0;
+		info->activep4_stats[fid].memallocation.mem_start = mem_start;
+		info->activep4_stats[fid].memallocation.mem_end = mem_end;
+		info->activep4_stats[fid].memallocation.pagemask = mem_end - mem_start;
+		info->activep4_stats[fid].segfault = 0;
 	}
 }
 
