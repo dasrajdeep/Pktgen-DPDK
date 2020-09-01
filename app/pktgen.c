@@ -364,14 +364,13 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 
 		info->activep4_stats[core_id].idx++;
 
-		if(info->activep4_stats[core_id].idx > 20E6) info->activep4_stats[core_id].fid_cap = 4;
+		/*if(info->activep4_stats[core_id].idx > 20E6) info->activep4_stats[core_id].fid_cap = 4;
 		else if(info->activep4_stats[core_id].idx > 16E6) info->activep4_stats[core_id].fid_cap = 3;
-		else if(info->activep4_stats[core_id].idx > 8E6) info->activep4_stats[core_id].fid_cap = 2;
+		else if(info->activep4_stats[core_id].idx > 8E6) info->activep4_stats[core_id].fid_cap = 2;*/
 
 		if(info->activep4_init_packets < 65536) fid = 9;
-		else fid = info->activep4_stats[core_id].curr_fid++ % 4;
+		else fid = info->activep4_stats[core_id].curr_fid++ % info->activep4_stats[core_id].fid_cap;
 		//fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
-		//fid = info->activep4_stats[core_id].curr_fid++ % info->activep4_stats[core_id].fid_cap;
 		
 		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
 
@@ -393,11 +392,12 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 			if(info->activep4_init_packets < 65536) {
 				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
 				info->activep4_init_packets++;
-			} else if(key == memaddr) {
-				pktgen_active_program_cacheread(instr, memaddr);
-			} else {
-				pktgen_active_program_cacheread(instr, memaddr);
+			} else if(key == memaddr || info->activep4_stats[fid].memallocation.updated == 0) {
+				pktgen_active_program_cacheread(instr, key);
 				//pktgen_active_program_nop(instr);
+			} else {
+				//pktgen_active_program_cacheread(instr, memaddr);
+				pktgen_active_program_nop(instr);
 			}
 		}
 	}
@@ -519,6 +519,9 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 					info->activep4_last_sec = now_secs;
 				if(now_secs > info->activep4_last_sec)
 					info->activep4_curr_sec++;
+				if(info->activep4_curr_sec == 2) info->activep4_stats[lid].fid_cap = 2;
+				else if(info->activep4_curr_sec == 5) info->activep4_stats[lid].fid_cap = 3;
+				else if(info->activep4_curr_sec == 8) info->activep4_stats[lid].fid_cap = 4;
 				info->activep4_stats[lid].latency_samples[info->activep4_curr_sec]++;
 				info->activep4_stats[lid].latency_avg[info->activep4_curr_sec]
 					= (
@@ -1004,7 +1007,9 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 		info->activep4_stats[fid].memallocation.mem_start = mem_start;
 		info->activep4_stats[fid].memallocation.mem_end = mem_end;
 		info->activep4_stats[fid].memallocation.pagemask = mem_end - mem_start;
+		info->activep4_stats[fid].memallocation.updated = 1;
 		info->activep4_stats[fid].segfault = 0;
+		pktgen_log_info("allocated %u - %u to FID %u", mem_start, mem_end, fid + 1);
 	}
 }
 

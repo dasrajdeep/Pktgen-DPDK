@@ -230,6 +230,7 @@ typedef struct {
 	uint16_t	mem_start;
 	uint16_t	mem_end;
 	uint16_t	pagemask;
+	uint8_t		updated;
 } pg_active_memalloc_t;
 
 typedef struct {
