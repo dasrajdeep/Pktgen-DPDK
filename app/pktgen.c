@@ -286,9 +286,12 @@ pktgen_active_pointer(port_info_t *info, struct rte_mbuf *m, int32_t seq_idx)
 	p += (info->seq_pkt[seq_idx].ipProto == PG_IPPROTO_UDP) ?
 	     sizeof(struct pg_udp_hdr) : sizeof(struct pg_tcp_hdr);
 
+	/* Force pointer to be aligned correctly */
+	p = RTE_PTR_ALIGN_CEIL(p, sizeof(uint64_t));
+
 	p += sizeof(tstamp_t);
 
-	active = (pg_active_initial_hdr *)p;
+	active = (pg_active_initial_hdr *) p;
 
 	return active;
 }
@@ -330,6 +333,14 @@ pktgen_active_program_cachewrite(pg_active_instruction_hdr *instr, uint16_t mema
 	pktgen_active_add_instruction(instr, 0, 8, 0, 0);instr++;
 }
 
+static inline void
+pktgen_active_program_nop(pg_active_instruction_hdr *instr)
+{
+	pktgen_active_add_instruction(instr, 0, 1, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 0, 0, 0);instr++;
+	pktgen_active_add_instruction(instr, 0, 8, 0, 0);instr++;
+}
+
 static inline uint16_t
 pktgen_active_get_key(port_info_t *info, int core_id)
 {
@@ -353,8 +364,14 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 
 		info->activep4_stats[core_id].idx++;
 
+		if(info->activep4_stats[core_id].idx > 20E6) info->activep4_stats[core_id].fid_cap = 4;
+		else if(info->activep4_stats[core_id].idx > 16E6) info->activep4_stats[core_id].fid_cap = 3;
+		else if(info->activep4_stats[core_id].idx > 8E6) info->activep4_stats[core_id].fid_cap = 2;
+
 		if(info->activep4_init_packets < 65536) fid = 9;
-		else fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
+		else fid = info->activep4_stats[core_id].curr_fid++ % 4;
+		//fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
+		//fid = info->activep4_stats[core_id].curr_fid++ % info->activep4_stats[core_id].fid_cap;
 		
 		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
 
@@ -372,12 +389,16 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		if(flags == 0) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
 			key = pktgen_active_get_key(info, core_id);
-			//key = 1;
 			memaddr = info->activep4_stats[fid].memallocation.mem_start + (key & info->activep4_stats[fid].memallocation.pagemask);
 			if(info->activep4_init_packets < 65536) {
 				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
 				info->activep4_init_packets++;
-			} else pktgen_active_program_cacheread(instr, memaddr);
+			} else if(key == memaddr) {
+				pktgen_active_program_cacheread(instr, memaddr);
+			} else {
+				pktgen_active_program_cacheread(instr, memaddr);
+				//pktgen_active_program_nop(instr);
+			}
 		}
 	}
 }
@@ -467,7 +488,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
     //int qid = get_rxque(pktgen.l2p, lid, info->pid);
     int i;
 	uint8_t memfault_flag;
-    uint64_t lat, jitter;
+    uint64_t lat, jitter, now, now_secs, clkspeed, lat_adjusted;
 
     flags = rte_atomic32_read(&info->port_flags);
 
@@ -489,7 +510,23 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			memfault_flag = (rte_bswap16(activep4hdr->flags) & 0x0080) >> 7;
 			
 			if (tstamp->magic == TSTAMP_MAGIC) {
-				lat = (rte_rdtsc_precise() - tstamp->timestamp);
+				now = rte_rdtsc_precise();
+				clkspeed = rte_get_tsc_hz();
+				now_secs = round(now / clkspeed);
+				lat = (now - tstamp->timestamp);
+				lat_adjusted = (lat * 1.0f / clkspeed) * 1E9;
+				if(info->activep4_last_sec == 0) 
+					info->activep4_last_sec = now_secs;
+				if(now_secs > info->activep4_last_sec)
+					info->activep4_curr_sec++;
+				info->activep4_stats[lid].latency_samples[info->activep4_curr_sec]++;
+				info->activep4_stats[lid].latency_avg[info->activep4_curr_sec]
+					= (
+						info->activep4_stats[lid].latency_avg[info->activep4_curr_sec] * (info->activep4_stats[lid].latency_samples[info->activep4_curr_sec] - 1) * 1.0f 
+						+ lat_adjusted
+					) / 
+					info->activep4_stats[lid].latency_samples[info->activep4_curr_sec];
+				info->activep4_last_sec = now_secs;
 				
                 if (flags & (SEND_LATENCY_PKTS | SEND_RATE_PACKETS))
                 {
@@ -508,25 +545,25 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
                 {
                     /* Record latency if it's time for sampling (seperately per lcore) */
                     latsamp_stats_t* stats = &info->activep4_stats[lid].latsamp_stats;
-                    uint64_t now = rte_rdtsc_precise();
                     stats->pkt_counter++;
                     if ((stats->next == 0 || now >= stats->next) && memfault_flag == 0) {
 
                         if (stats->idx < stats->num_samples) {
-                            stats->data[stats->idx] = lat * 1000000000 / rte_get_tsc_hz();		/* Do we want to keep it as cycles? */
-                            stats->idx++;
+                            stats->data[stats->idx] = lat * 1E9 / clkspeed;		/* Do we want to keep it as cycles? */
+                            stats->ts[stats->idx] = now * (1E9f / clkspeed);
+							stats->idx++;
                         }
 
                         if (info->latsamp_type == LATSAMPLER_POISSON)
 						{
                             // TODO: Write poisson
                             double next_possion_time_ns = next_poisson_time(info->latsamp_rate);
-                            stats->next = now + next_possion_time_ns * (double) rte_get_tsc_hz();		// Time based
+                            stats->next = now + next_possion_time_ns * (double) clkspeed;		// Time based
                             //pktgen_log_warning("core %d, queue %d next poisson time %lf, ms: %lu", lid, qid, next_possion_time_ns, stats->next*1000/rte_get_tsc_hz());
                         }
                         else 
                         {	// LATSAMPLER_SIMPLE or LATSAMPLER_UNSPEC
-                            stats->next = now + rte_get_tsc_hz()/info->latsamp_rate;		// Time based
+                            stats->next = now + clkspeed/info->latsamp_rate;		// Time based
 							//stats->next = now;
                             // stats->next = stats->pkt_counter + info->latsamp_rate;		// Packet count based
                         }
@@ -946,9 +983,14 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	// ActiveP4 packets
 	info->sizes._512_1023 = info->activep4_init_packets;
 	p = rte_pktmbuf_mtod(m, char *);
-	p += sizeof(struct pg_ether_hdr) + sizeof(struct pg_ipv4_hdr) + sizeof(struct pg_udp_hdr) + sizeof(tstamp_t);
+	p += sizeof(struct pg_ether_hdr) + sizeof(struct pg_ipv4_hdr) + sizeof(struct pg_udp_hdr);
+	p = RTE_PTR_ALIGN_CEIL(p, sizeof(uint64_t));
+	p += sizeof(tstamp_t);
 	active = (pg_active_initial_hdr *)p;
 	fid = rte_bswap16(active->fid) - 1;
+	/*if(fid == 1) info->sizes._256_511++;
+	else if(fid == 2) info->sizes._512_1023++;
+	else if(fid == 3) info->sizes._1024_1518++;*/
 	memfault_flag = (rte_bswap16(active->flags) & 0x0080) >> 7;
 	allocated_flag = (rte_bswap16(active->flags) & 0x0010) >> 4;
 	if(memfault_flag == 1 && fid < MAX_FID) {

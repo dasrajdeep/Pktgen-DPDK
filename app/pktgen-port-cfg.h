@@ -40,6 +40,7 @@ extern "C" {
 #define KEYDIST_ZIPF		0
 #define KEYDIST_LINEAR		1
 #define KEYDIST_UNIFORM		2
+#define MAX_DURATION_SECS	60
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -200,6 +201,7 @@ typedef struct {
 
 typedef struct {
     uint64_t 	data[MAX_LATENCY_ENTRIES];		/** Record for latencies */	
+	uint64_t	ts[MAX_LATENCY_ENTRIES];
     uint32_t 	idx;							/**< Index to the latencies array */
     uint64_t 	next;							/**< Next latency entry */
     uint64_t 	pkt_counter;					/**< Pkt counter */
@@ -241,6 +243,11 @@ typedef struct {
 	uint64_t				lastallocreq;
 	latsamp_stats_t 		latsamp_stats;
 	uint64_t 				memfaults;
+	uint16_t				fid_cap;
+	uint16_t				curr_fid;
+	uint64_t				latency_avg[MAX_DURATION_SECS];
+	uint64_t				latency_samples[MAX_DURATION_SECS];
+	uint64_t				curr_samples;
 } activep4_t __rte_cache_aligned;
 
 typedef struct port_info_s {
@@ -364,6 +371,8 @@ typedef struct port_info_s {
 	// ActiveP4
 	activep4_t	activep4_stats[10];
 	uint32_t	activep4_init_packets;
+	uint64_t	activep4_last_sec;
+	uint16_t	activep4_curr_sec;
 
 } port_info_t;
 

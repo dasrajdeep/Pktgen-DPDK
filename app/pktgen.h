@@ -398,7 +398,7 @@ double next_poisson_time(double rateParameter);
 typedef struct {
 	uint64_t timestamp;
 	uint16_t magic;
-} tstamp_t;
+} __attribute__((__packed__)) tstamp_t;
 
 #define TSTAMP_MAGIC   (('T' << 8) + 's')
 
