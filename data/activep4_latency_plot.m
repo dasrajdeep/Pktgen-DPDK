@@ -37,6 +37,7 @@ NUM_FIDS = 4;
 %     end
 % end
 
+figure
 plot_data = 0;
 for i = 1:NUM_FIDS
     data = csvread(sprintf('activep4_latency_%d.csv', i - 1));
@@ -48,10 +49,14 @@ for i = 1:NUM_FIDS
     for t = 1:size(ts, 1)
         plot_data(t, i) = data(t);
     end
+    plot(1:size(ts, 1), data);
+    hold on
 end
 
-figure
-area(plot_data);
+% figure
+% area(plot_data);
+% ylim([10 14]);
 xlabel('Time (seconds)');
 ylabel('Latency (us)');
 legend(cellstr(num2str([1:4]', ' FID=%-d '))');
+grid on

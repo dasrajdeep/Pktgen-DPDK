@@ -34,13 +34,16 @@ extern "C" {
 #define MAX_LATENCY_ENTRIES 50100		// Max 101000?, limited by max allowed size of latsamp_stats_t.data[]
 #define MAX_LATENCY_QUEUES 	10
 #define MAX_ACTIVEP4_LENGTH	256
-#define MAX_ZIPF_SIZE		10000
+#define MAX_KEYSPACE		65536
+#define MAX_ZIPF_SIZE		1E7
 #define MAX_FID				4
 #define MAX_FID_MASK		0x00000007
 #define KEYDIST_ZIPF		0
 #define KEYDIST_LINEAR		1
 #define KEYDIST_UNIFORM		2
 #define MAX_DURATION_SECS	60
+#define ACTIVEP4_INIT_EN	1
+#define ACTIVEP4_INIT_DIS	0	
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -234,9 +237,14 @@ typedef struct {
 } pg_active_memalloc_t;
 
 typedef struct {
+	uint16_t	: key;
+	uint16_t	: rank;
+} pg_active_zipf_t;
+
+typedef struct {
 	uint64_t				idx;
-	uint16_t				zipf_len;
-	uint32_t				zipf[MAX_ZIPF_SIZE];
+	uint32_t				zipf_len;
+	pg_active_zipf_t		zipf[MAX_ZIPF_SIZE];
 	char					distfile[128];
 	uint8_t					keydist;
 	pg_active_memalloc_t	memallocation;
@@ -374,6 +382,7 @@ typedef struct port_info_s {
 	uint32_t	activep4_init_packets;
 	uint64_t	activep4_last_sec;
 	uint16_t	activep4_curr_sec;
+	uint8_t		activep4_enable_init;
 
 } port_info_t;
 

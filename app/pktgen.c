@@ -346,11 +346,19 @@ pktgen_active_get_key(port_info_t *info, int core_id)
 {
 	if(info->activep4_stats[core_id].keydist == KEYDIST_LINEAR)
 		return ((uint16_t) info->activep4_stats[core_id].idx) & 0xFFFF;
-	else if(info->activep4_stats[core_id].keydist == KEYDIST_ZIPF)
-		return ((uint32_t) info->activep4_stats[core_id].zipf[rand() % info->activep4_stats[core_id].zipf_len]) & 0xFFFF;
 	else if(info->activep4_stats[core_id].keydist == KEYDIST_UNIFORM)
 		return (uint16_t) (rand() & 0xFFFF);
 	return 0;
+}
+
+static inline double 
+drand(void) 
+{
+    double d;
+    do {
+       d = (((rand () * RS_SCALE) + rand ()) * RS_SCALE + rand ()) * RS_SCALE;
+    } while (d >= 1);
+    return d;
 }
 
 static inline void
@@ -359,17 +367,17 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 {
 	int i;
 	uint16_t key, fid, flags, memaddr;
+	uint32_t index;
+	uint8_t hit;
+	pg_active_zipf_t z;
 	int core_id = (rte_lcore_id() - 10) / 2 - 1;
 	for (i = 0; i < cnt; i++) {
 
 		info->activep4_stats[core_id].idx++;
 
-		/*if(info->activep4_stats[core_id].idx > 20E6) info->activep4_stats[core_id].fid_cap = 4;
-		else if(info->activep4_stats[core_id].idx > 16E6) info->activep4_stats[core_id].fid_cap = 3;
-		else if(info->activep4_stats[core_id].idx > 8E6) info->activep4_stats[core_id].fid_cap = 2;*/
-
-		if(info->activep4_init_packets < 65536) fid = 9;
+		if(info->activep4_enable_init == ACTIVEP4_INIT_EN && info->activep4_init_packets < MAX_KEYSPACE) fid = 9;
 		else fid = info->activep4_stats[core_id].curr_fid++ % info->activep4_stats[core_id].fid_cap;
+
 		//fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
 		
 		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
@@ -387,18 +395,33 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 
 		if(flags == 0) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
-			key = pktgen_active_get_key(info, core_id);
+
+			index = irand(info->activep4_stats[core_id].zipf_len);
+			z = info->activep4_stats[core_id].zipf[index];
+			hit = (z.rank <= info->activep4_stats[fid].memallocation.pagemask) ? 1 : 0;
+			if(info->activep4_enable_init == ACTIVEP4_INIT_EN && info->activep4_init_packets < MAX_KEYSPACE) {
+				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
+				info->activep4_init_packets++;
+			} else if(hit == 1 || info->activep4_stats[fid].memallocation.updated == 0) {
+				key = z.key;
+				memaddr = info->activep4_stats[fid].memallocation.mem_start + (key & info->activep4_stats[fid].memallocation.pagemask);
+				pktgen_active_program_cacheread(instr, memaddr);
+			} else {
+				pktgen_active_program_nop(instr);
+			}
+
+			/*key = pktgen_active_get_key(info, core_id);
 			memaddr = info->activep4_stats[fid].memallocation.mem_start + (key & info->activep4_stats[fid].memallocation.pagemask);
-			if(info->activep4_init_packets < 65536) {
+			if(info->activep4_enable_init == ACTIVEP4_INIT_EN && info->activep4_init_packets < 65536) {
 				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
 				info->activep4_init_packets++;
 			} else if(key == memaddr || info->activep4_stats[fid].memallocation.updated == 0) {
 				pktgen_active_program_cacheread(instr, key);
 				//pktgen_active_program_nop(instr);
 			} else {
-				//pktgen_active_program_cacheread(instr, memaddr);
+				//pktgen_active_program_cacheread(instr, key);
 				pktgen_active_program_nop(instr);
-			}
+			}*/
 		}
 	}
 }

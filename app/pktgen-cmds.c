@@ -3606,10 +3606,13 @@ read_zipf_dist(port_info_t *info, int fid)
 {
 	FILE* fptr = fopen(info->activep4_stats[fid].distfile, "r");
     if(fptr != NULL) {
-        uint32_t datapoint = 0;
+        uint16_t freq, key, i, rank;
 		info->activep4_stats[fid].zipf_len = 0;
-		while(fscanf(fptr, "%d", &datapoint) != EOF && info->activep4_stats[fid].zipf_len < MAX_ZIPF_SIZE) {
-			info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++] = datapoint;
+		rank = 0;
+		while(fscanf(fptr, "%d,%d", &freq, &key) != EOF && info->activep4_stats[fid].zipf_len < MAX_KEYSPACE) {
+			for(i = 0; i < freq; i++)
+				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++] = { key, rank };
+			rank++;
 		}
 		fclose(fptr);
     } else {
@@ -3645,9 +3648,10 @@ activep4_set_default_options(port_info_t *info)
 	info->activep4_last_sec = 0;
 	info->activep4_curr_sec = 0;
 	info->activep4_init_packets = 0;
+	info->activep4_enable_init = ACTIVEP4_INIT_DIS;
 	for(i = 0; i < 10; i++) {
 		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
-		strcpy(info->activep4_stats[i].distfile, "zipf_2_10k.csv");
+		strcpy(info->activep4_stats[i].distfile, "keydist_zipf_alpha_ranked_3.csv");
 		read_zipf_dist(info, i);
 	}
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");

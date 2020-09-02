@@ -100,6 +100,9 @@
 extern "C" {
 #endif
 
+#define RS_SCALE (1.0 / (1.0 + RAND_MAX))
+#define irand(x) ((unsigned int) ((x) * drand ()))
+
 #define MAX_MATRIX_ENTRIES      128
 #define MAX_STRING              256
 #define Million                 (uint64_t)(1000000ULL)
