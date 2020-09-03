@@ -2720,7 +2720,6 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	port_info_t *info = &pktgen.info[pid];
 	pkt_seq_t *pkt = &info->seq_pkt[seq];
 	port_info_t *dst_info;
-	int i;
 
 	pkt->pktSize            = MIN_PKT_SIZE;
 	pkt->sport              = DEFAULT_SRC_PORT;
@@ -2743,20 +2742,6 @@ pktgen_port_defaults(uint32_t pid, uint8_t seq)
 	info->seqIdx            = 0;
 	info->prime_cnt         = DEFAULT_PRIME_COUNT;
 	info->delta             = 0;
-
-	for(i = 0; i < MAX_FID; i++) {
-		strcpy(info->activep4_stats[i].distfile, "");
-		info->activep4_stats[i].idx		= 0;
-		info->activep4_stats[i].zipf_len	= 0;
-		info->activep4_stats[i].keydist	= KEYDIST_LINEAR;
-		info->activep4_stats[i].lastallocreq = 0;
-		info->activep4_stats[i].memfaults = 0;
-		info->activep4_stats[i].segfault = 0;
-		info->activep4_stats[i].memallocation.fid = i + 1;
-		info->activep4_stats[i].memallocation.mem_start = 0;
-		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
-		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
-	}
 
 	pkt->ip_mask = DEFAULT_NETMASK;
 	if ( (pid & 1) == 0) {
@@ -3633,9 +3618,11 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].curr_fid = 0;
 		info->activep4_stats[i].zipf_len	= 0;
 		info->activep4_stats[i].keydist	= KEYDIST_UNIFORM;
-		info->activep4_stats[i].lastallocreq = 0;
 		info->activep4_stats[i].memfaults = 0;
 		info->activep4_stats[i].segfault = 0;
+		info->activep4_stats[i].malloc_sent = 0;
+		info->activep4_stats[i].malloc_start = 0;
+		info->activep4_stats[i].malloc_count = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
 		info->activep4_stats[i].memallocation.mem_start = 0;
 		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
@@ -3653,7 +3640,7 @@ activep4_set_default_options(port_info_t *info)
 	info->activep4_enable_init = ACTIVEP4_INIT_EN;
 	for(i = 0; i < 10; i++) {
 		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
-		strcpy(info->activep4_stats[i].distfile, "keydist_zipf_alpha_ranked_3.csv");
+		strcpy(info->activep4_stats[i].distfile, "keydist_zipf_alpha_ranked_2.csv");
 		read_zipf_dist(info, i);
 	}
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");

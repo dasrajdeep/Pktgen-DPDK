@@ -424,6 +424,11 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 				//pktgen_active_program_cacheread(instr, key);
 				pktgen_active_program_nop(instr);
 			}*/
+		} else {
+			if(info->activep4_stats[fid].malloc_sent == 0) {
+				info->activep4_stats[fid].malloc_sent = 1;
+				info->activep4_stats[fid].malloc_start = rte_rdtsc_precise();
+			}
 		}
 	}
 }
@@ -924,7 +929,7 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	pg_active_initial_hdr *active;
 	char *p;
 	uint8_t memfault_flag, allocated_flag;
-	uint16_t fid, mem_start, mem_end;
+	uint16_t fid, mem_start, mem_end, malloc_id;
 	//int core_id = rte_lcore_id() / 2 - 1;
 
 	pType = pktgen_packet_type(m);
@@ -1029,14 +1034,28 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 		info->sizes._1024_1518++;
 	}
 	if(allocated_flag == 1) {
-		mem_start = rte_bswap16(active->acc);
-		mem_end = rte_bswap16(active->acc2);
-		info->activep4_stats[fid].memallocation.mem_start = mem_start;
-		info->activep4_stats[fid].memallocation.mem_end = mem_end;
-		info->activep4_stats[fid].memallocation.pagemask = mem_end - mem_start;
-		info->activep4_stats[fid].memallocation.updated = 1;
-		info->activep4_stats[fid].segfault = 0;
-		pktgen_log_info("allocated %u - %u to FID %u", mem_start, mem_end, fid + 1);
+		malloc_id = rte_bswap16(active->id);
+		if(malloc_id != info->activep4_stats[fid].memallocation.malloc_id) {
+			mem_start = rte_bswap16(active->acc);
+			mem_end = rte_bswap16(active->acc2);
+			info->activep4_stats[fid].memallocation.malloc_id = malloc_id;
+			info->activep4_stats[fid].memallocation.mem_start = mem_start;
+			info->activep4_stats[fid].memallocation.mem_end = mem_end;
+			info->activep4_stats[fid].memallocation.pagemask = mem_end - mem_start;
+			info->activep4_stats[fid].memallocation.updated = 1;
+			info->activep4_stats[fid].segfault = 0;
+			pktgen_log_info("allocated %u - %u to FID %u", mem_start, mem_end, fid + 1);
+			if(info->activep4_stats[fid].malloc_sent == 1 
+				&& info->activep4_stats[fid].malloc_count < MAX_MALLOCS) 
+			{
+				info->activep4_stats[fid].malloc_sent = 0;
+				info->activep4_stats[fid].malloc_elapsed_us[info->activep4_stats[fid].malloc_count] 
+					= ((rte_rdtsc_precise() - info->activep4_stats[fid].malloc_start) * 1.0f / rte_get_tsc_hz())
+					* 1E6;
+				pktgen_log_info("memory allocation complete after %d us", info->activep4_stats[fid].malloc_elapsed_us[info->activep4_stats[fid].malloc_count]);
+				info->activep4_stats[fid].malloc_count++;
+			}
+		}
 	}
 }
 

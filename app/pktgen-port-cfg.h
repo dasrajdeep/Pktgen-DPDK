@@ -43,6 +43,7 @@ extern "C" {
 #define KEYDIST_UNIFORM		2
 #define MAX_DURATION_SECS	60
 #define MAX_DURATION_MS		60000
+#define MAX_MALLOCS			10000
 #define ACTIVEP4_INIT_EN	1
 #define ACTIVEP4_INIT_DIS	0	
 
@@ -231,6 +232,7 @@ typedef struct {
 
 typedef struct {
 	uint16_t	fid;
+	uint16_t	malloc_id;
 	uint16_t	mem_start;
 	uint16_t	mem_end;
 	uint16_t	pagemask;
@@ -250,7 +252,10 @@ typedef struct {
 	uint8_t					keydist;
 	pg_active_memalloc_t	memallocation;
 	uint8_t					segfault;
-	uint64_t				lastallocreq;
+	uint8_t					malloc_sent;
+	uint64_t				malloc_start;
+	uint64_t				malloc_elapsed_us[MAX_MALLOCS];
+	uint32_t				malloc_count;
 	latsamp_stats_t 		latsamp_stats;
 	uint64_t 				memfaults;
 	uint16_t				fid_cap;
