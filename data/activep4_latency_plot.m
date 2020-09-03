@@ -55,8 +55,7 @@ end
 
 % figure
 % area(plot_data);
-% ylim([10 14]);
-xlabel('Time (seconds)');
+xlabel('Time (us)');
 ylabel('Latency (us)');
 legend(cellstr(num2str([1:4]', ' FID=%-d '))');
 grid on

@@ -3,7 +3,7 @@
 import numpy as np
 
 KEYSPACE_SIZE = 65536
-ZIPF_ALPHA = 3
+ZIPF_ALPHA = 2
 
 zipf_dist = np.random.zipf(ZIPF_ALPHA, KEYSPACE_SIZE).tolist()
 zipf_dist_indexed = []

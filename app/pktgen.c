@@ -375,8 +375,10 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 
 		info->activep4_stats[core_id].idx++;
 
+		//info->activep4_stats[core_id].fid_cap = 4;
+
 		if(info->activep4_enable_init == ACTIVEP4_INIT_EN && info->activep4_init_packets < MAX_KEYSPACE) fid = 9;
-		else fid = info->activep4_stats[core_id].curr_fid++ % info->activep4_stats[core_id].fid_cap;
+		else fid = info->activep4_stats[core_id].curr_fid++ % MAX_FID;
 
 		//fid = (uint16_t) (info->activep4_stats[core_id].idx % MAX_FID); // skip FIDs with pending memfaults?
 		
@@ -402,7 +404,7 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 			if(info->activep4_enable_init == ACTIVEP4_INIT_EN && info->activep4_init_packets < MAX_KEYSPACE) {
 				pktgen_active_program_cachewrite(instr, info->activep4_init_packets);
 				info->activep4_init_packets++;
-			} else if(hit == 1 || info->activep4_stats[fid].memallocation.updated == 0) {
+			} else if(fid < info->activep4_stats[core_id].fid_cap && (hit == 1 || info->activep4_stats[fid].memallocation.updated == 0)) {
 				key = z.key;
 				memaddr = info->activep4_stats[fid].memallocation.mem_start + (key & info->activep4_stats[fid].memallocation.pagemask);
 				pktgen_active_program_cacheread(instr, memaddr);
@@ -511,7 +513,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
     //int qid = get_rxque(pktgen.l2p, lid, info->pid);
     int i;
 	uint8_t memfault_flag;
-    uint64_t lat, jitter, now, now_secs, clkspeed, lat_adjusted;
+    uint64_t lat, jitter, now, now_msecs, clkspeed, lat_adjusted;
 
     flags = rte_atomic32_read(&info->port_flags);
 
@@ -535,24 +537,26 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			if (tstamp->magic == TSTAMP_MAGIC) {
 				now = rte_rdtsc_precise();
 				clkspeed = rte_get_tsc_hz();
-				now_secs = round(now / clkspeed);
+				now_msecs = round((now * 1 / clkspeed));
 				lat = (now - tstamp->timestamp);
 				lat_adjusted = (lat * 1.0f / clkspeed) * 1E9;
-				if(info->activep4_last_sec == 0) 
-					info->activep4_last_sec = now_secs;
-				if(now_secs > info->activep4_last_sec)
-					info->activep4_curr_sec++;
-				if(info->activep4_curr_sec == 2) info->activep4_stats[lid].fid_cap = 2;
-				else if(info->activep4_curr_sec == 5) info->activep4_stats[lid].fid_cap = 3;
-				else if(info->activep4_curr_sec == 8) info->activep4_stats[lid].fid_cap = 4;
-				info->activep4_stats[lid].latency_samples[info->activep4_curr_sec]++;
-				info->activep4_stats[lid].latency_avg[info->activep4_curr_sec]
+				if(info->activep4_last_msec == 0) 
+					info->activep4_last_msec = now_msecs;
+				if(now_msecs > info->activep4_last_msec)
+					info->activep4_curr_msec++;
+				if(info->activep4_curr_msec >= 8) info->activep4_stats[lid].fid_cap = 4;
+				else if(info->activep4_curr_msec >= 6) info->activep4_stats[lid].fid_cap = 3;
+				else if(info->activep4_curr_msec >= 4) info->activep4_stats[lid].fid_cap = 2;
+				else if(info->activep4_curr_msec >= 2) info->activep4_stats[lid].fid_cap = 1;
+				else info->activep4_stats[lid].fid_cap = 0;
+				info->activep4_stats[lid].latency_samples[info->activep4_curr_msec]++;
+				info->activep4_stats[lid].latency_avg[info->activep4_curr_msec]
 					= (
-						info->activep4_stats[lid].latency_avg[info->activep4_curr_sec] * (info->activep4_stats[lid].latency_samples[info->activep4_curr_sec] - 1) * 1.0f 
+						info->activep4_stats[lid].latency_avg[info->activep4_curr_msec] * (info->activep4_stats[lid].latency_samples[info->activep4_curr_msec] - 1) * 1.0f 
 						+ lat_adjusted
 					) / 
-					info->activep4_stats[lid].latency_samples[info->activep4_curr_sec];
-				info->activep4_last_sec = now_secs;
+					info->activep4_stats[lid].latency_samples[info->activep4_curr_msec];
+				info->activep4_last_msec = now_msecs;
 				
                 if (flags & (SEND_LATENCY_PKTS | SEND_RATE_PACKETS))
                 {

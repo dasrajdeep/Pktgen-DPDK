@@ -1670,7 +1670,7 @@ pktgen_stop_latency_sampler(port_info_t *info)
 		{
 			pktgen_log_info("Writing to file %s", info->activep4_stats[j].latsamp_stats.outfile);
 			count = 0;
-			for (i = 0; i < info->activep4_curr_sec; i++) {
+			for (i = 0; i < info->activep4_curr_msec; i++) {
 				fprintf(outfile, "%" PRIu16 ",%" PRIu64 "\n", i, info->activep4_stats[j].latency_avg[i]);
 				count++;
 			}
@@ -3609,9 +3609,11 @@ read_zipf_dist(port_info_t *info, int fid)
         uint16_t freq, key, i, rank;
 		info->activep4_stats[fid].zipf_len = 0;
 		rank = 0;
-		while(fscanf(fptr, "%d,%d", &freq, &key) != EOF && info->activep4_stats[fid].zipf_len < MAX_KEYSPACE) {
-			for(i = 0; i < freq; i++)
-				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++] = { key, rank };
+		while(fscanf(fptr, "%hd,%hd", &freq, &key) != EOF && info->activep4_stats[fid].zipf_len < MAX_KEYSPACE) {
+			for(i = 0; i < freq; i++) {
+				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len].key = key;
+				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++].rank = rank;
+			}
 			rank++;
 		}
 		fclose(fptr);
@@ -3627,7 +3629,7 @@ activep4_set_default_options(port_info_t *info)
 	for(i = 0; i < 10; i++) {
 		strcpy(info->activep4_stats[i].distfile, "");
 		info->activep4_stats[i].idx		= 0;
-		info->activep4_stats[i].fid_cap = 1;
+		info->activep4_stats[i].fid_cap = 0;
 		info->activep4_stats[i].curr_fid = 0;
 		info->activep4_stats[i].zipf_len	= 0;
 		info->activep4_stats[i].keydist	= KEYDIST_UNIFORM;
@@ -3640,15 +3642,15 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 		info->activep4_stats[i].memallocation.updated = 0;
 		info->activep4_stats[i].curr_samples = 0;
-		for(j = 0; j < MAX_DURATION_SECS; j++) {
+		for(j = 0; j < MAX_DURATION_MS; j++) {
 			info->activep4_stats[i].latency_avg[j] = 0;
 			info->activep4_stats[i].latency_samples[j] = 0;
 		}
 	}
-	info->activep4_last_sec = 0;
-	info->activep4_curr_sec = 0;
+	info->activep4_last_msec = 0;
+	info->activep4_curr_msec = 0;
 	info->activep4_init_packets = 0;
-	info->activep4_enable_init = ACTIVEP4_INIT_DIS;
+	info->activep4_enable_init = ACTIVEP4_INIT_EN;
 	for(i = 0; i < 10; i++) {
 		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
 		strcpy(info->activep4_stats[i].distfile, "keydist_zipf_alpha_ranked_3.csv");
