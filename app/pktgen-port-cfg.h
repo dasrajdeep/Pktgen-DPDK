@@ -262,7 +262,6 @@ typedef struct {
 	uint16_t				curr_fid;
 	uint64_t				latency_avg[MAX_DURATION_MS];
 	uint64_t				latency_samples[MAX_DURATION_MS];
-	uint64_t				curr_samples;
 } activep4_t __rte_cache_aligned;
 
 typedef struct port_info_s {

@@ -3628,7 +3628,6 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
 		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 		info->activep4_stats[i].memallocation.updated = 0;
-		info->activep4_stats[i].curr_samples = 0;
 		for(j = 0; j < MAX_DURATION_MS; j++) {
 			info->activep4_stats[i].latency_avg[j] = 0;
 			info->activep4_stats[i].latency_samples[j] = 0;
