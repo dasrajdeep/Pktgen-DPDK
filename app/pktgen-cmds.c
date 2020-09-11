@@ -3608,6 +3608,23 @@ read_zipf_dist(port_info_t *info, int fid)
 }
 
 void
+read_active_program(uint16_t bytecode[][3], uint16_t *codelen, char *src_file)
+{
+	uint16_t flags_goto, opcode, arg;
+	FILE* fptr = fopen(src_file, "r");
+	*codelen = 0;
+	if(fptr != NULL) {
+		while(fscanf(fptr, "%hd,%hd,%hd", &flags_goto, &opcode, &arg) != EOF && *codelen < MAX_CODELEN) {
+			bytecode[*codelen][0] = flags_goto;
+			bytecode[*codelen][1] = opcode;
+			bytecode[*codelen][2] = arg;
+			(*codelen)++;
+		}
+		fclose(fptr);
+	}
+}
+
+void
 activep4_set_default_options(port_info_t *info) 
 {
 	int i, j;
@@ -3625,8 +3642,8 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].malloc_count = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
 		info->activep4_stats[i].memallocation.mem_start = 0;
-		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
-		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
+		info->activep4_stats[i].memallocation.mem_end = 0x000F;
+		info->activep4_stats[i].memallocation.pagemask = 0x000F;
 		info->activep4_stats[i].memallocation.updated = 0;
 		for(j = 0; j < MAX_DURATION_MS; j++) {
 			info->activep4_stats[i].latency_avg[j] = 0;
@@ -3636,16 +3653,19 @@ activep4_set_default_options(port_info_t *info)
 	info->activep4_last_msec = 0;
 	info->activep4_curr_msec = 0;
 	info->activep4_init_packets = 0;
-	info->activep4_enable_init = ACTIVEP4_INIT_EN;
+	info->activep4_enable_init = ACTIVEP4_INIT_DIS;
 	for(i = 0; i < 10; i++) {
 		sprintf(info->activep4_stats[i].latsamp_stats.outfile, "activep4_latency_%d.csv", i);
 		strcpy(info->activep4_stats[i].distfile, "keydist_zipf_alpha_ranked_2.csv");
 		read_zipf_dist(info, i);
 	}
+	strcpy(info->bytecode_file, "cache_read_req.csv");
+	read_active_program(info->bytecode_cacheread_request, &info->codelen_cacheread_request, info->bytecode_file);
+	info->caching_frequency_threshold = 1;
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");
-	single_set_pkt_size(info, 128);
+	single_set_pkt_size(info, 512);
 	single_set_tx_burst(info, 1);
-	//single_set_tx_count(info, 10);
+	single_set_tx_count(info, 10);
 	//pktgen_set_capture(info, ENABLE_STATE);
 }
 

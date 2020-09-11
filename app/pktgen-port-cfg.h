@@ -46,6 +46,7 @@ extern "C" {
 #define MAX_MALLOCS			10000
 #define ACTIVEP4_INIT_EN	1
 #define ACTIVEP4_INIT_DIS	0	
+#define MAX_CODELEN			1280
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -227,7 +228,6 @@ typedef struct {
 	uint8_t		flags;
 	uint8_t		opcode;
 	uint16_t	args;
-	uint8_t		label;
 } __attribute__((__packed__)) pg_active_instruction_hdr;
 
 typedef struct {
@@ -388,6 +388,11 @@ typedef struct port_info_s {
 	uint64_t	activep4_last_msec;
 	uint16_t	activep4_curr_msec;
 	uint8_t		activep4_enable_init;
+
+	char		bytecode_file[100];
+	uint16_t 	bytecode_cacheread_request[MAX_CODELEN][3];
+	uint16_t 	codelen_cacheread_request;
+	uint16_t 	caching_frequency_threshold;
 
 } port_info_t;
 

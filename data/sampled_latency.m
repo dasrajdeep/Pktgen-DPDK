@@ -8,8 +8,8 @@ NUM_FIDS = 4;
 
 figure
 for i = 1:NUM_FIDS
-    data = csvread(sprintf('activep4_latency_%d.csv', i - 1));
-    data = data( : , 2) / 1000;
+    data = csvread(sprintf('halfway/activep4_latency_%d.csv', i - 1));
+    data = data( : , 1) / 1000;
     cdfplot(data);
     hold on
 end
