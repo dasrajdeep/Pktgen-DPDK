@@ -3625,6 +3625,21 @@ read_active_program(uint16_t bytecode[][3], uint16_t *codelen, char *src_file)
 }
 
 void
+read_flowdist(port_info_t *info, char *src_file)
+{
+	uint32_t flowsize;
+	FILE* fptr = fopen(src_file, "r");
+	info->flowdist_len = 0;
+	if(fptr != NULL) {
+		while(fscanf(fptr, "%u", &flowsize) != EOF && info->flowdist_len < MAX_FLOWDIST_SIZE) {
+			info->flowdist[info->flowdist_len] = flowsize;
+			info->flowdist_len++;
+		}
+		fclose(fptr);
+	}
+}
+
+void
 activep4_set_default_options(port_info_t *info) 
 {
 	int i, j;
@@ -3640,6 +3655,8 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].malloc_sent = 0;
 		info->activep4_stats[i].malloc_start = 0;
 		info->activep4_stats[i].malloc_count = 0;
+		info->activep4_stats[i].curr_flowsize = 0;
+		info->activep4_stats[i].curr_bytes_sent = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
 		info->activep4_stats[i].memallocation.mem_start = 0;
 		info->activep4_stats[i].memallocation.mem_end = 0x000F;
@@ -3660,12 +3677,18 @@ activep4_set_default_options(port_info_t *info)
 		read_zipf_dist(info, i);
 	}
 	strcpy(info->bytecode_file, "cache_read_req.csv");
+	strcpy(info->bytecode_file_slb, "slb_src.csv");
+	strcpy(info->flowdist_file, "flowdists/flowDist_web.txt");
 	read_active_program(info->bytecode_cacheread_request, &info->codelen_cacheread_request, info->bytecode_file);
+	read_active_program(info->bytecode_slb, &info->codelen_slb, info->bytecode_file_slb);
+	read_flowdist(info, info->flowdist_file);
+	pktgen_log_info("Read %d instructions from %s\n", info->codelen_slb, info->bytecode_file_slb);
+	pktgen_log_info("Read %d samples from %s\n", info->flowdist_len, info->flowdist_file);
 	info->caching_frequency_threshold = 1;
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");
 	single_set_pkt_size(info, 512);
 	single_set_tx_burst(info, 1);
-	single_set_tx_count(info, 10);
+	//single_set_tx_count(info, 10);
 	//pktgen_set_capture(info, ENABLE_STATE);
 }
 

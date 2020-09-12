@@ -47,6 +47,7 @@ extern "C" {
 #define ACTIVEP4_INIT_EN	1
 #define ACTIVEP4_INIT_DIS	0	
 #define MAX_CODELEN			1280
+#define MAX_FLOWDIST_SIZE	1000
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -262,6 +263,11 @@ typedef struct {
 	uint16_t				curr_fid;
 	uint64_t				latency_avg[MAX_DURATION_MS];
 	uint64_t				latency_samples[MAX_DURATION_MS];
+	uint32_t				curr_flowsize;
+	uint32_t				curr_bytes_sent;
+	uint32_t				curr_flow_magic;
+	uint32_t				curr_ipaddr;
+	uint16_t				curr_port;
 } activep4_t __rte_cache_aligned;
 
 typedef struct port_info_s {
@@ -390,9 +396,15 @@ typedef struct port_info_s {
 	uint8_t		activep4_enable_init;
 
 	char		bytecode_file[100];
+	char		bytecode_file_slb[100];
+	char		flowdist_file[100];
 	uint16_t 	bytecode_cacheread_request[MAX_CODELEN][3];
+	uint16_t 	bytecode_slb[MAX_CODELEN][3];
 	uint16_t 	codelen_cacheread_request;
+	uint16_t 	codelen_slb;
 	uint16_t 	caching_frequency_threshold;
+	uint32_t	flowdist[MAX_FLOWDIST_SIZE];
+	uint16_t	flowdist_len;
 
 } port_info_t;
 
