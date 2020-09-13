@@ -48,6 +48,7 @@ extern "C" {
 #define ACTIVEP4_INIT_DIS	0	
 #define MAX_CODELEN			1280
 #define MAX_FLOWDIST_SIZE	1000
+#define FLOWS_PER_CORE		1024
 
 typedef struct port_sizes_s {
 	uint64_t _64;		/**< Number of 64 byte packets */
@@ -246,6 +247,13 @@ typedef struct {
 } pg_active_zipf_t;
 
 typedef struct {
+	uint32_t				packets_remaining;
+	uint32_t				curr_flow_magic;
+	uint32_t				curr_ipaddr;
+	uint16_t				curr_port;
+} flow_t;
+
+typedef struct {
 	uint64_t				idx;
 	uint32_t				zipf_len;
 	pg_active_zipf_t		zipf[MAX_ZIPF_SIZE];
@@ -263,11 +271,8 @@ typedef struct {
 	uint16_t				curr_fid;
 	uint64_t				latency_avg[MAX_DURATION_MS];
 	uint64_t				latency_samples[MAX_DURATION_MS];
-	uint32_t				curr_flowsize;
-	uint32_t				curr_bytes_sent;
-	uint32_t				curr_flow_magic;
-	uint32_t				curr_ipaddr;
-	uint16_t				curr_port;
+	uint32_t				fidx;
+	flow_t					flows[FLOWS_PER_CORE];
 } activep4_t __rte_cache_aligned;
 
 typedef struct port_info_s {
@@ -389,6 +394,7 @@ typedef struct port_info_s {
     char latsamp_outfile[256];							/**< Path to file for dumping latency samples */
 
 	// ActiveP4
+	uint64_t	idx;
 	activep4_t	activep4_stats[10];
 	uint32_t	activep4_init_packets;
 	uint64_t	activep4_last_msec;

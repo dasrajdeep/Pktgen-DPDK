@@ -3655,8 +3655,7 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].malloc_sent = 0;
 		info->activep4_stats[i].malloc_start = 0;
 		info->activep4_stats[i].malloc_count = 0;
-		info->activep4_stats[i].curr_flowsize = 0;
-		info->activep4_stats[i].curr_bytes_sent = 0;
+		info->activep4_stats[i].fidx = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
 		info->activep4_stats[i].memallocation.mem_start = 0;
 		info->activep4_stats[i].memallocation.mem_end = 0x000F;
@@ -3666,7 +3665,11 @@ activep4_set_default_options(port_info_t *info)
 			info->activep4_stats[i].latency_avg[j] = 0;
 			info->activep4_stats[i].latency_samples[j] = 0;
 		}
+		for(j = 0; j < FLOWS_PER_CORE; j++) {
+			info->activep4_stats[i].flows[j].packets_remaining = 0;
+		}
 	}
+	info->idx = 0;
 	info->activep4_last_msec = 0;
 	info->activep4_curr_msec = 0;
 	info->activep4_init_packets = 0;

@@ -414,13 +414,19 @@ pktgen_active_get_key(port_info_t *info, int core_id)
 static inline uint32_t
 pktgen_active_get_ipaddr()
 {
-	return 0xC0000000 + irand(0xFFFFFF);
+	return 0xC0000000 + (uint32_t) (rte_rand() & 0xFFFFFF);
 }
 
 static inline uint16_t
 pktgen_active_get_port()
 {
-	return irand(0xFFFF);
+	return rte_rand() & 0xFFFF;
+}
+
+static inline uint32_t
+pktgen_get_index(uint16_t range)
+{
+	return rte_rand() & 7;
 }
 
 static inline void
@@ -437,49 +443,57 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		pg_active_instruction_hdr *instr;
 		struct pg_udp_hdr *udp;
 		struct pg_ipv4_hdr *ipv4;
+		activep4_t *stats = &info->activep4_stats[core_id];
 
 		activep4 = pktgen_active_pointer(info, mbufs[i], seq_idx);
 		udp = pktgen_udp_pointer(mbufs[i]);
 		ipv4 = pktgen_ipv4_pointer(mbufs[i]);
 
-		if(info->activep4_stats[core_id].curr_bytes_sent >= info->activep4_stats[core_id].curr_flowsize) {
-			index = rand() % info->flowdist_len;
-			info->activep4_stats[core_id].curr_bytes_sent = 0;
-			info->activep4_stats[core_id].curr_flowsize = info->flowdist[index];
-			info->activep4_stats[core_id].curr_flow_magic = rand();
-			info->activep4_stats[core_id].idx++;
-			info->activep4_stats[core_id].curr_ipaddr = pktgen_active_get_ipaddr();
-			info->activep4_stats[core_id].curr_port = pktgen_active_get_port();
+		if(stats->flows[stats->fidx].packets_remaining == 0) {
+			index = pktgen_get_index(info->flowdist_len);
+			stats->flows[stats->fidx].packets_remaining = ceil(info->flowdist[index] * 1.0f / 300);
+			stats->flows[stats->fidx].curr_flow_magic = rte_rand();
+			info->idx++;
+			stats->flows[stats->fidx].curr_ipaddr = pktgen_active_get_ipaddr();
+			stats->flows[stats->fidx].curr_port = pktgen_active_get_port();
+			//info->sizes._512_1023 = info->activep4_stats[core_id].curr_flowsize;
+			//info->sizes._512_1023 = index;
+			info->sizes._1024_1518 = info->idx;
 		}
 
-		udp->src_port = info->activep4_stats[core_id].curr_port;
-		ipv4->src_addr = info->activep4_stats[core_id].curr_ipaddr;
-
 		fid = 9;
-		
+
 		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
+
+		if(stats->flows[stats->fidx].packets_remaining == 1) flags |= 0x0800;
+
+		udp->src_port = stats->flows[stats->fidx].curr_port;
+		ipv4->src_addr = stats->flows[stats->fidx].curr_ipaddr;
 
 		activep4->flags = rte_bswap16(flags);
 		activep4->fid = rte_bswap16(fid + 1);
 		activep4->acc = 0x0000;
-		activep4->acc2 = rte_bswap16(info->activep4_stats[core_id].curr_flow_magic);
-		activep4->id = rte_bswap16( ((uint16_t) info->activep4_stats[core_id].idx) & 0xFFFF );
-		activep4->freq = 0x0000;
+		activep4->acc2 = rte_bswap16(stats->flows[stats->fidx].curr_flow_magic);
+		activep4->id = rte_bswap16( (uint16_t)((info->idx >> 16) & 0xFFFF) );
+		activep4->freq = rte_bswap16( (uint16_t)(info->idx & 0xFFFF) );
 
-		if(flags == 0) {
+		if(flags != 0x0020) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
 			/*index = irand(info->activep4_stats[core_id].zipf_len);
 			key = info->activep4_stats[core_id].zipf[index].key;
 			activep4->acc2 = rte_bswap16(key);
 			pktgen_customize_cacheread_request(info, instr, key);*/
 			pktgen_customize_slb(info, instr);
-			info->activep4_stats[core_id].curr_bytes_sent += 400;
+			stats->flows[stats->fidx].packets_remaining--;
+			//info->sizes._512_1023++;
 		} else {
 			if(info->activep4_stats[fid].malloc_sent == 0) {
 				info->activep4_stats[fid].malloc_sent = 1;
 				info->activep4_stats[fid].malloc_start = rte_rdtsc_precise();
 			}
 		}
+
+		stats->fidx = (stats->fidx + 1) & (FLOWS_PER_CORE - 1);
 	}
 }
 
