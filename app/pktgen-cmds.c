@@ -1670,14 +1670,14 @@ pktgen_stop_latency_sampler(port_info_t *info)
 		{
 			pktgen_log_info("Writing to file %s", info->activep4_stats[j].latsamp_stats.outfile);
 			count = 0;
-			for (i = 0; i < info->activep4_curr_msec; i++) {
+			/*for (i = 0; i < info->activep4_curr_msec; i++) {
 				fprintf(outfile, "%" PRIu16 ",%" PRIu64 "\n", i, info->activep4_stats[j].latency_avg[i]);
 				count++;
-			}
-			/*for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
+			}*/
+			for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
 				fprintf(outfile, "%" PRIu64 ",%" PRIu64 "\n", info->activep4_stats[j].latsamp_stats.ts[i], info->activep4_stats[j].latsamp_stats.data[i]); 
 				count++;
-			}*/
+			}
 			fclose(outfile);
 			pktgen_log_warning("Wrote %d sample latencies to file %s", count, info->activep4_stats[j].latsamp_stats.outfile);
 		}
@@ -3594,7 +3594,7 @@ read_zipf_dist(port_info_t *info, int fid)
         uint16_t freq, key, i, rank;
 		info->activep4_stats[fid].zipf_len = 0;
 		rank = 0;
-		while(fscanf(fptr, "%hd,%hd", &freq, &key) != EOF && info->activep4_stats[fid].zipf_len < MAX_KEYSPACE) {
+		while(fscanf(fptr, "%hd,%hd", &freq, &key) != EOF && info->activep4_stats[fid].zipf_len < MAX_ZIPF_SIZE) {
 			for(i = 0; i < freq; i++) {
 				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len].key = key;
 				info->activep4_stats[fid].zipf[info->activep4_stats[fid].zipf_len++].rank = rank;
@@ -3657,6 +3657,7 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].malloc_count = 0;
 		info->activep4_stats[i].fidx = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
+		info->activep4_stats[i].memallocation.malloc_id = 0;
 		info->activep4_stats[i].memallocation.mem_start = 0;
 		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
 		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
@@ -3680,14 +3681,16 @@ activep4_set_default_options(port_info_t *info)
 		read_zipf_dist(info, i);
 	}
 	strcpy(info->bytecode_file, "cache_read_req.csv");
+	//strcpy(info->bytecode_file, "cache_read_test.csv");
 	strcpy(info->bytecode_file_slb, "slb_src.csv");
 	strcpy(info->flowdist_file, "flowdists/flowDist_web.txt");
 	read_active_program(info->bytecode_cacheread_request, &info->codelen_cacheread_request, info->bytecode_file);
 	read_active_program(info->bytecode_slb, &info->codelen_slb, info->bytecode_file_slb);
 	read_flowdist(info, info->flowdist_file);
+	pktgen_log_info("Read %d instructions from %s\n", info->codelen_cacheread_request, info->bytecode_file);
 	pktgen_log_info("Read %d instructions from %s\n", info->codelen_slb, info->bytecode_file_slb);
 	pktgen_log_info("Read %d samples from %s\n", info->flowdist_len, info->flowdist_file);
-	info->caching_frequency_threshold = 1;
+	info->caching_frequency_threshold = 30000;
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");
 	single_set_pkt_size(info, 512);
 	single_set_tx_burst(info, 1);

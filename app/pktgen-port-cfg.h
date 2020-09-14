@@ -273,7 +273,7 @@ typedef struct {
 	uint64_t				latency_samples[MAX_DURATION_MS];
 	uint32_t				fidx;
 	flow_t					flows[FLOWS_PER_CORE];
-} activep4_t __rte_cache_aligned;
+} activep4_t;
 
 typedef struct port_info_s {
 	uint16_t pid;		/**< Port ID value */

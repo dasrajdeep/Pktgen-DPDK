@@ -354,7 +354,7 @@ pktgen_insert_program(pg_active_instruction_hdr *instr, uint16_t bytecode[][3], 
 }
 
 static inline void
-pktgen_customize_cacheread_request(port_info_t *info, pg_active_instruction_hdr *instr, uint16_t key)
+pktgen_customize_cacheread_request(port_info_t *info, pg_active_instruction_hdr *instr, uint16_t key, uint16_t fidx)
 {
 	uint16_t i;
 	uint16_t bytecode[MAX_CODELEN][3];
@@ -364,21 +364,21 @@ pktgen_customize_cacheread_request(port_info_t *info, pg_active_instruction_hdr 
 		bytecode[i][2] = info->bytecode_cacheread_request[i][2];
 	}
 	bytecode[0][2] = key;
-	bytecode[2][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[3][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[2][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[3][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	bytecode[5][2] = key;
 	bytecode[11][2] = key;
-	bytecode[13][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[14][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[13][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[14][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	bytecode[18][2] = key;
-	bytecode[20][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[21][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[20][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[21][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	bytecode[25][2] = key;
-	bytecode[27][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[28][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[27][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[28][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	bytecode[32][2] = key;
-	bytecode[34][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[35][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[34][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[35][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	bytecode[45][2] = info->caching_frequency_threshold;
 	bytecode[47][2] = info->caching_frequency_threshold;
 	pktgen_insert_program(instr, bytecode, info->codelen_cacheread_request);
@@ -437,6 +437,7 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 	uint16_t key, fid, flags;
 	uint32_t index;
 	int core_id = (rte_lcore_id() - 10) / 2 - 1;
+	core_id = 0;
 	for (i = 0; i < cnt; i++) {
 
 		pg_active_initial_hdr *activep4;
@@ -449,52 +450,55 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		udp = pktgen_udp_pointer(mbufs[i]);
 		ipv4 = pktgen_ipv4_pointer(mbufs[i]);
 
-		if(stats->flows[stats->fidx].packets_remaining == 0) {
-			index = pktgen_get_index(info->flowdist_len);
-			stats->flows[stats->fidx].packets_remaining = ceil(info->flowdist[index] * 1.0f / 300);
-			//stats->flows[stats->fidx].packets_remaining = 10;
-			stats->flows[stats->fidx].curr_flow_magic = rte_rand();
-			info->idx++;
-			stats->flows[stats->fidx].curr_ipaddr = pktgen_active_get_ipaddr();
-			stats->flows[stats->fidx].curr_port = pktgen_active_get_port();
-			//info->sizes._512_1023 = info->activep4_stats[core_id].curr_flowsize;
-			//info->sizes._512_1023 = index;
-			//info->sizes._1024_1518 = info->idx;
-		}
-
-		fid = 0;
+		fid = 10;
 		flags = 0x0000;
 
-		if(stats->flows[stats->fidx].packets_remaining == 1) flags = 0x0800;
-		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : flags;
+		if(fid == 1) {
+			if(stats->flows[stats->fidx].packets_remaining == 0) {
+				index = pktgen_get_index(info->flowdist_len);
+				stats->flows[stats->fidx].packets_remaining = ceil(info->flowdist[index] * 1.0f / 300);
+				//stats->flows[stats->fidx].packets_remaining = 10;
+				stats->flows[stats->fidx].curr_flow_magic = rte_rand();
+				info->idx++;
+				stats->flows[stats->fidx].curr_ipaddr = pktgen_active_get_ipaddr();
+				stats->flows[stats->fidx].curr_port = pktgen_active_get_port();
+				//info->sizes._512_1023 = info->activep4_stats[core_id].curr_flowsize;
+				//info->sizes._512_1023 = index;
+				//info->sizes._1024_1518 = info->idx;
+			}
+			if(stats->flows[stats->fidx].packets_remaining == 1) flags = 0x0800;
+			udp->src_port = stats->flows[stats->fidx].curr_port;
+			ipv4->src_addr = rte_bswap32(stats->flows[stats->fidx].curr_ipaddr);
+		}
 
-		udp->src_port = stats->flows[stats->fidx].curr_port;
-		ipv4->src_addr = rte_bswap32(stats->flows[stats->fidx].curr_ipaddr);
+		flags = (info->activep4_stats[core_id].segfault == 1) ? 0x0020 : flags;
 
 		activep4->flags = rte_bswap16(flags);
-		activep4->fid = rte_bswap16(fid + 1);
+		activep4->fid = rte_bswap16(fid);
 		activep4->acc = 0x0000;
-		activep4->acc2 = rte_bswap16(stats->flows[stats->fidx].curr_flow_magic);
-		activep4->id = rte_bswap16( (uint16_t)((info->idx >> 16) & 0xFFFF) );
-		activep4->freq = rte_bswap16( (uint16_t)(info->idx & 0xFFFF) );
+		activep4->acc2 = (fid == 1) ? rte_bswap16(stats->flows[stats->fidx].curr_flow_magic) : 0x0000;
+		activep4->id = (fid == 1) ? rte_bswap16( (uint16_t)(info->idx & 0xFFFF) ) : 0x0000;
+		activep4->freq = 0x0000;
 
 		if(flags != 0x0020) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
-			/*index = irand(info->activep4_stats[core_id].zipf_len);
-			key = info->activep4_stats[core_id].zipf[index].key;
-			activep4->acc2 = rte_bswap16(key);
-			pktgen_customize_cacheread_request(info, instr, key);*/
-			pktgen_customize_slb(info, instr);
-			stats->flows[stats->fidx].packets_remaining--;
-			//info->sizes._512_1023++;
+			if(fid == 1) {
+				pktgen_customize_slb(info, instr);
+				stats->flows[stats->fidx].packets_remaining--;
+				//info->sizes._512_1023++;
+				stats->fidx = (stats->fidx + 1) & (FLOWS_PER_CORE - 1);
+			} else {
+				index = irand(info->activep4_stats[core_id].zipf_len);
+				key = info->activep4_stats[core_id].zipf[index].key;
+				activep4->acc2 = rte_bswap16(key);
+				pktgen_customize_cacheread_request(info, instr, key, core_id);
+			}
 		} else {
-			if(info->activep4_stats[fid].malloc_sent == 0) {
-				info->activep4_stats[fid].malloc_sent = 1;
-				info->activep4_stats[fid].malloc_start = rte_rdtsc_precise();
+			if(info->activep4_stats[core_id].malloc_sent == 0) {
+				info->activep4_stats[core_id].malloc_sent = 1;
+				info->activep4_stats[core_id].malloc_start = rte_rdtsc_precise();
 			}
 		}
-
-		stats->fidx = (stats->fidx + 1) & (FLOWS_PER_CORE - 1);
 	}
 }
 
@@ -601,7 +605,8 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			tstamp = pktgen_tstamp_pointer(info, pkts[i], seq_idx);
 			pg_active_initial_hdr *activep4hdr;
 			activep4hdr = pktgen_active_pointer(info, pkts[i], seq_idx);
-			lid = rte_bswap16(activep4hdr->fid) - 1;
+			//lid = rte_bswap16(activep4hdr->fid) - 1;
+			lid = 0;
 			memfault_flag = (rte_bswap16(activep4hdr->flags) & 0x0080) >> 7;
 			
 			if (tstamp->magic == TSTAMP_MAGIC) {
@@ -622,7 +627,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 					) / 
 					info->activep4_stats[lid].latency_samples[info->activep4_curr_msec];
 				info->activep4_last_msec = now_msecs;
-				pktgen_log_info("[RESPONSE] key=%hu, value=%hu", rte_bswap16(activep4hdr->acc), rte_bswap16(activep4hdr->acc2));
+				//pktgen_log_info("[RESPONSE] key=%hu, value=%hu", rte_bswap16(activep4hdr->acc), rte_bswap16(activep4hdr->acc2));
 				
                 if (flags & (SEND_LATENCY_PKTS | SEND_RATE_PACKETS))
                 {
@@ -642,7 +647,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
                     /* Record latency if it's time for sampling (seperately per lcore) */
                     latsamp_stats_t* stats = &info->activep4_stats[lid].latsamp_stats;
                     stats->pkt_counter++;
-                    if ((stats->next == 0 || now >= stats->next) && memfault_flag == 0) {
+                    if ((stats->next == 0 || now >= stats->next) && memfault_flag == 0 && rte_bswap16(activep4hdr->acc) > 0) {
 
                         if (stats->idx < stats->num_samples) {
                             stats->data[stats->idx] = lat * 1E9 / clkspeed;		/* Do we want to keep it as cycles? */
@@ -1077,18 +1082,22 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	}
 
 	// ActiveP4 packets
-	info->sizes._512_1023 = info->activep4_init_packets;
+	//info->sizes._512_1023 = info->activep4_init_packets;
 	p = rte_pktmbuf_mtod(m, char *);
 	p += sizeof(struct pg_ether_hdr) + sizeof(struct pg_ipv4_hdr) + sizeof(struct pg_udp_hdr);
 	p = RTE_PTR_ALIGN_CEIL(p, sizeof(uint64_t));
 	p += sizeof(tstamp_t);
 	active = (pg_active_initial_hdr *)p;
-	fid = rte_bswap16(active->fid) - 1;
+	//fid = rte_bswap16(active->fid) - 1;
+	fid = 0;
 	/*if(fid == 1) info->sizes._256_511++;
 	else if(fid == 2) info->sizes._512_1023++;
 	else if(fid == 3) info->sizes._1024_1518++;*/
 	memfault_flag = (rte_bswap16(active->flags) & 0x0080) >> 7;
 	allocated_flag = (rte_bswap16(active->flags) & 0x0010) >> 4;
+	if(rte_bswap16(active->acc) > 0 && allocated_flag != 1) {
+		info->sizes._512_1023++;
+	}
 	if(memfault_flag == 1 && fid < MAX_FID) {
 		info->activep4_stats[fid].segfault = 1;
 		info->activep4_stats[fid].memfaults++;
@@ -1096,6 +1105,7 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	}
 	if(allocated_flag == 1) {
 		malloc_id = rte_bswap16(active->id);
+		info->activep4_stats[fid].segfault = 0;
 		if(malloc_id != info->activep4_stats[fid].memallocation.malloc_id) {
 			mem_start = rte_bswap16(active->acc);
 			mem_end = rte_bswap16(active->acc2);
@@ -1104,7 +1114,6 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 			info->activep4_stats[fid].memallocation.mem_end = mem_end;
 			info->activep4_stats[fid].memallocation.pagemask = mem_end - mem_start;
 			info->activep4_stats[fid].memallocation.updated = 1;
-			info->activep4_stats[fid].segfault = 0;
 			pktgen_log_info("allocated %u - %u to FID %u", mem_start, mem_end, fid + 1);
 			if(info->activep4_stats[fid].malloc_sent == 1 
 				&& info->activep4_stats[fid].malloc_count < MAX_MALLOCS) 
