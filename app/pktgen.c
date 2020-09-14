@@ -414,7 +414,7 @@ pktgen_active_get_key(port_info_t *info, int core_id)
 static inline uint32_t
 pktgen_active_get_ipaddr()
 {
-	return 0xC0000000 + (uint32_t) (rte_rand() & 0xFFFFFF);
+	return 0xC0A80000 | (uint32_t) (rte_rand() & 0x0000FFFF);
 }
 
 static inline uint16_t
@@ -452,23 +452,24 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		if(stats->flows[stats->fidx].packets_remaining == 0) {
 			index = pktgen_get_index(info->flowdist_len);
 			stats->flows[stats->fidx].packets_remaining = ceil(info->flowdist[index] * 1.0f / 300);
+			//stats->flows[stats->fidx].packets_remaining = 10;
 			stats->flows[stats->fidx].curr_flow_magic = rte_rand();
 			info->idx++;
 			stats->flows[stats->fidx].curr_ipaddr = pktgen_active_get_ipaddr();
 			stats->flows[stats->fidx].curr_port = pktgen_active_get_port();
 			//info->sizes._512_1023 = info->activep4_stats[core_id].curr_flowsize;
 			//info->sizes._512_1023 = index;
-			info->sizes._1024_1518 = info->idx;
+			//info->sizes._1024_1518 = info->idx;
 		}
 
-		fid = 9;
+		fid = 0;
+		flags = 0x0000;
 
-		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : 0x0000;
-
-		if(stats->flows[stats->fidx].packets_remaining == 1) flags |= 0x0800;
+		if(stats->flows[stats->fidx].packets_remaining == 1) flags = 0x0800;
+		flags = (info->activep4_stats[fid].segfault == 1) ? 0x0020 : flags;
 
 		udp->src_port = stats->flows[stats->fidx].curr_port;
-		ipv4->src_addr = stats->flows[stats->fidx].curr_ipaddr;
+		ipv4->src_addr = rte_bswap32(stats->flows[stats->fidx].curr_ipaddr);
 
 		activep4->flags = rte_bswap16(flags);
 		activep4->fid = rte_bswap16(fid + 1);

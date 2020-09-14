@@ -3658,8 +3658,8 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].fidx = 0;
 		info->activep4_stats[i].memallocation.fid = i + 1;
 		info->activep4_stats[i].memallocation.mem_start = 0;
-		info->activep4_stats[i].memallocation.mem_end = 0x000F;
-		info->activep4_stats[i].memallocation.pagemask = 0x000F;
+		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
+		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 		info->activep4_stats[i].memallocation.updated = 0;
 		for(j = 0; j < MAX_DURATION_MS; j++) {
 			info->activep4_stats[i].latency_avg[j] = 0;

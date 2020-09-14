@@ -247,8 +247,8 @@ typedef struct {
 } pg_active_zipf_t;
 
 typedef struct {
-	uint32_t				packets_remaining;
-	uint32_t				curr_flow_magic;
+	uint16_t				packets_remaining;
+	uint16_t				curr_flow_magic;
 	uint32_t				curr_ipaddr;
 	uint16_t				curr_port;
 } flow_t;
