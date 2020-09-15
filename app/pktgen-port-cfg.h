@@ -400,6 +400,7 @@ typedef struct port_info_s {
 	uint64_t	activep4_last_msec;
 	uint16_t	activep4_curr_msec;
 	uint8_t		activep4_enable_init;
+	uint8_t		curr_fid;
 
 	char		bytecode_file[100];
 	char		bytecode_file_slb[100];

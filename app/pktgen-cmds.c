@@ -3691,6 +3691,7 @@ activep4_set_default_options(port_info_t *info)
 	pktgen_log_info("Read %d instructions from %s\n", info->codelen_slb, info->bytecode_file_slb);
 	pktgen_log_info("Read %d samples from %s\n", info->flowdist_len, info->flowdist_file);
 	info->caching_frequency_threshold = 30000;
+	info->curr_fid = 1;
 	single_set_latsampler_params(info, "poisson", 10000, 1000, "latency.csv");
 	single_set_pkt_size(info, 512);
 	single_set_tx_burst(info, 1);

@@ -385,7 +385,7 @@ pktgen_customize_cacheread_request(port_info_t *info, pg_active_instruction_hdr 
 }
 
 static inline void
-pktgen_customize_slb(port_info_t *info, pg_active_instruction_hdr *instr)
+pktgen_customize_slb(port_info_t *info, pg_active_instruction_hdr *instr, uint16_t fidx)
 {
 	uint16_t i;
 	uint16_t bytecode[MAX_CODELEN][3];
@@ -394,10 +394,11 @@ pktgen_customize_slb(port_info_t *info, pg_active_instruction_hdr *instr)
 		bytecode[i][1] = info->bytecode_slb[i][1];
 		bytecode[i][2] = info->bytecode_slb[i][2];
 	}
-	bytecode[2][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[3][2] = info->activep4_stats[9].memallocation.mem_start;
-	bytecode[24][2] = info->activep4_stats[9].memallocation.pagemask;
-	bytecode[25][2] = info->activep4_stats[9].memallocation.mem_start;
+	bytecode[2][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[5][2] = info->activep4_stats[fidx].memallocation.mem_start;
+	bytecode[17][2] = info->activep4_stats[fidx].memallocation.mem_start;
+	bytecode[24][2] = info->activep4_stats[fidx].memallocation.pagemask;
+	bytecode[25][2] = info->activep4_stats[fidx].memallocation.mem_start;
 	pktgen_insert_program(instr, bytecode, info->codelen_slb);
 }
 
@@ -414,7 +415,7 @@ pktgen_active_get_key(port_info_t *info, int core_id)
 static inline uint32_t
 pktgen_active_get_ipaddr()
 {
-	return 0xC0A80000 | (uint32_t) (rte_rand() & 0x0000FFFF);
+	return 0x0a010000 | (uint32_t) (rte_rand() & 0x0000FFFF);
 }
 
 static inline uint16_t
@@ -437,8 +438,15 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 	uint16_t key, fid, flags;
 	uint32_t index;
 	int core_id = (rte_lcore_id() - 10) / 2 - 1;
-	core_id = 0;
+	//core_id = 0;
 	for (i = 0; i < cnt; i++) {
+
+		//fid = info->curr_fid;
+		//info->curr_fid = (fid % 2) + 1;
+		//core_id = fid - 1;
+
+		fid = core_id + 1;
+		//fid = 1;
 
 		pg_active_initial_hdr *activep4;
 		pg_active_instruction_hdr *instr;
@@ -450,10 +458,10 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		udp = pktgen_udp_pointer(mbufs[i]);
 		ipv4 = pktgen_ipv4_pointer(mbufs[i]);
 
-		fid = 10;
+		udp->dgram_cksum = 0;
 		flags = 0x0000;
 
-		if(fid == 1) {
+		if(fid == 2) {
 			if(stats->flows[stats->fidx].packets_remaining == 0) {
 				index = pktgen_get_index(info->flowdist_len);
 				stats->flows[stats->fidx].packets_remaining = ceil(info->flowdist[index] * 1.0f / 300);
@@ -468,7 +476,7 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 			}
 			if(stats->flows[stats->fidx].packets_remaining == 1) flags = 0x0800;
 			udp->src_port = stats->flows[stats->fidx].curr_port;
-			ipv4->src_addr = rte_bswap32(stats->flows[stats->fidx].curr_ipaddr);
+			//ipv4->src_addr = rte_bswap32(stats->flows[stats->fidx].curr_ipaddr);
 		}
 
 		flags = (info->activep4_stats[core_id].segfault == 1) ? 0x0020 : flags;
@@ -476,24 +484,26 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		activep4->flags = rte_bswap16(flags);
 		activep4->fid = rte_bswap16(fid);
 		activep4->acc = 0x0000;
-		activep4->acc2 = (fid == 1) ? rte_bswap16(stats->flows[stats->fidx].curr_flow_magic) : 0x0000;
-		activep4->id = (fid == 1) ? rte_bswap16( (uint16_t)(info->idx & 0xFFFF) ) : 0x0000;
+		activep4->acc2 = (fid == 2) ? rte_bswap16(stats->flows[stats->fidx].curr_flow_magic) : 0x0000;
+		activep4->id = (fid == 2) ? rte_bswap16( (uint16_t)(info->idx & 0xFFFF) ) : 0x0000;
 		activep4->freq = 0x0000;
 
 		if(flags != 0x0020) {
 			instr = (pg_active_instruction_hdr*) ((char*) activep4 + sizeof(pg_active_initial_hdr));
-			if(fid == 1) {
-				pktgen_customize_slb(info, instr);
+			if(fid == 2) {
+				pktgen_customize_slb(info, instr, core_id);
 				stats->flows[stats->fidx].packets_remaining--;
-				//info->sizes._512_1023++;
+				info->sizes._512_1023++;
 				stats->fidx = (stats->fidx + 1) & (FLOWS_PER_CORE - 1);
-			} else {
+			} else if(fid == 1) {
+				info->sizes._64++;
 				index = irand(info->activep4_stats[core_id].zipf_len);
 				key = info->activep4_stats[core_id].zipf[index].key;
 				activep4->acc2 = rte_bswap16(key);
 				pktgen_customize_cacheread_request(info, instr, key, core_id);
 			}
 		} else {
+			//info->sizes._65_127++;
 			if(info->activep4_stats[core_id].malloc_sent == 0) {
 				info->activep4_stats[core_id].malloc_sent = 1;
 				info->activep4_stats[core_id].malloc_start = rte_rdtsc_precise();
@@ -605,8 +615,8 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			tstamp = pktgen_tstamp_pointer(info, pkts[i], seq_idx);
 			pg_active_initial_hdr *activep4hdr;
 			activep4hdr = pktgen_active_pointer(info, pkts[i], seq_idx);
-			//lid = rte_bswap16(activep4hdr->fid) - 1;
-			lid = 0;
+			lid = rte_bswap16(activep4hdr->fid) - 1;
+			//lid = 0;
 			memfault_flag = (rte_bswap16(activep4hdr->flags) & 0x0080) >> 7;
 			
 			if (tstamp->magic == TSTAMP_MAGIC) {
@@ -1088,15 +1098,15 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 	p = RTE_PTR_ALIGN_CEIL(p, sizeof(uint64_t));
 	p += sizeof(tstamp_t);
 	active = (pg_active_initial_hdr *)p;
-	//fid = rte_bswap16(active->fid) - 1;
-	fid = 0;
+	fid = rte_bswap16(active->fid) - 1;
+	//fid = 0;
 	/*if(fid == 1) info->sizes._256_511++;
 	else if(fid == 2) info->sizes._512_1023++;
 	else if(fid == 3) info->sizes._1024_1518++;*/
 	memfault_flag = (rte_bswap16(active->flags) & 0x0080) >> 7;
 	allocated_flag = (rte_bswap16(active->flags) & 0x0010) >> 4;
 	if(rte_bswap16(active->acc) > 0 && allocated_flag != 1) {
-		info->sizes._512_1023++;
+		//info->sizes._512_1023++;
 	}
 	if(memfault_flag == 1 && fid < MAX_FID) {
 		info->activep4_stats[fid].segfault = 1;
@@ -1104,6 +1114,7 @@ pktgen_packet_classify(struct rte_mbuf *m, int pid)
 		info->sizes._1024_1518++;
 	}
 	if(allocated_flag == 1) {
+		//info->sizes._256_511++;
 		malloc_id = rte_bswap16(active->id);
 		info->activep4_stats[fid].segfault = 0;
 		if(malloc_id != info->activep4_stats[fid].memallocation.malloc_id) {

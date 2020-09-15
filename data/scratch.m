@@ -8,4 +8,4 @@ data = data / 1000;
 
 cdfplot(data);
 
-%xlim([0 50]);
+xlim([0 50]);
