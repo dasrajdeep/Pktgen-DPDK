@@ -1670,14 +1670,14 @@ pktgen_stop_latency_sampler(port_info_t *info)
 		{
 			pktgen_log_info("Writing to file %s", info->activep4_stats[j].latsamp_stats.outfile);
 			count = 0;
-			/*for (i = 0; i < info->activep4_curr_msec; i++) {
+			for (i = 0; i < info->activep4_curr_msec; i++) {
 				fprintf(outfile, "%" PRIu16 ",%" PRIu64 "\n", i, info->activep4_stats[j].latency_avg[i]);
 				count++;
-			}*/
-			for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
+			}
+			/*for (i = 0; i < info->activep4_stats[j].latsamp_stats.idx; i++){
 				fprintf(outfile, "%" PRIu64 ",%" PRIu64 "\n", info->activep4_stats[j].latsamp_stats.ts[i], info->activep4_stats[j].latsamp_stats.data[i]); 
 				count++;
-			}
+			}*/
 			fclose(outfile);
 			pktgen_log_warning("Wrote %d sample latencies to file %s", count, info->activep4_stats[j].latsamp_stats.outfile);
 		}
@@ -3662,6 +3662,8 @@ activep4_set_default_options(port_info_t *info)
 		info->activep4_stats[i].memallocation.mem_end = 0xFFFF;
 		info->activep4_stats[i].memallocation.pagemask = 0xFFFF;
 		info->activep4_stats[i].memallocation.updated = 0;
+		info->activep4_stats[i].start_time = rte_rdtsc_precise();
+		info->activep4_stats[i].elapsed_sec = 0;
 		for(j = 0; j < MAX_DURATION_MS; j++) {
 			info->activep4_stats[i].latency_avg[j] = 0;
 			info->activep4_stats[i].latency_samples[j] = 0;

@@ -353,6 +353,27 @@ pktgen_insert_program(pg_active_instruction_hdr *instr, uint16_t bytecode[][3], 
 	}
 }
 
+void
+activep4_hdr_ctor(void *hdr, uint16_t flags, uint16_t fid, uint16_t acc_1, uint16_t acc_2, uint16_t reserved_1, uint16_t reserved_2)
+{
+	activep4_hdr_t *activep4 = hdr;
+
+	activep4->flags = rte_bswap16(flags);
+	activep4->fid = rte_bswap16(fid);
+	activep4->acc_1 = rte_bswap16(acc_1);
+	activep4->acc_2 = rte_bswap16(acc_2);
+	activep4->reserved_1 = rte_bswap16(reserved_1);
+	activep4->reserved_2 = rte_bswap16(reserved_2);
+}
+
+static inline void
+pktgen_insert_nop_program(pg_active_instruction_hdr *instr)
+{
+	pktgen_active_add_instruction(instr, 0, 3, 0); instr++;
+	pktgen_active_add_instruction(instr, 0, 0, 0); instr++;
+	pktgen_active_add_instruction(instr, 0, 1, 0); instr++;
+}
+
 static inline void
 pktgen_customize_cacheread_request(port_info_t *info, pg_active_instruction_hdr *instr, uint16_t key, uint16_t fidx)
 {
@@ -437,6 +458,7 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 	int i;
 	uint16_t key, fid, flags;
 	uint32_t index;
+	uint64_t now, clkspeed;
 	int core_id = (rte_lcore_id() - 10) / 2 - 1;
 	//core_id = 0;
 	for (i = 0; i < cnt; i++) {
@@ -446,7 +468,16 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 		//core_id = fid - 1;
 
 		fid = core_id + 1;
-		//fid = 1;
+
+		if(core_id == 0) {
+			//fid = 10;
+			now = rte_rdtsc_precise();
+			clkspeed = rte_get_tsc_hz();
+			info->activep4_stats[core_id].elapsed_sec = (now - info->activep4_stats[core_id].start_time) * 1.0f / clkspeed;
+			/*if(info->activep4_stats[core_id].elapsed_sec >= 5) {
+				fid = 1;
+			}*/
+		}
 
 		pg_active_initial_hdr *activep4;
 		pg_active_instruction_hdr *instr;
@@ -500,7 +531,10 @@ pktgen_active_insert(port_info_t *info __rte_unused,
 				index = irand(info->activep4_stats[core_id].zipf_len);
 				key = info->activep4_stats[core_id].zipf[index].key;
 				activep4->acc2 = rte_bswap16(key);
-				pktgen_customize_cacheread_request(info, instr, key, core_id);
+				if(info->activep4_stats[core_id].elapsed_sec >= 5)
+					pktgen_customize_cacheread_request(info, instr, key, core_id);
+				else
+					pktgen_insert_nop_program(instr);
 			}
 		} else {
 			//info->sizes._65_127++;
@@ -622,7 +656,7 @@ pktgen_recv_tstamp(port_info_t *info, struct rte_mbuf **pkts, uint16_t nb_pkts)
 			if (tstamp->magic == TSTAMP_MAGIC) {
 				now = rte_rdtsc_precise();
 				clkspeed = rte_get_tsc_hz();
-				now_msecs = round((now * 1 / clkspeed));
+				now_msecs = round((now * 1.0f / clkspeed));
 				lat = (now - tstamp->timestamp);
 				lat_adjusted = (lat * 1.0f / clkspeed) * 1E9;
 				if(info->activep4_last_msec == 0) 

@@ -222,15 +222,26 @@ typedef struct {
 	uint16_t	fid;
 	uint16_t	acc;
 	uint16_t	acc2;
-	uint16_t	id;
-	uint16_t	freq;
-} __attribute__((__packed__)) pg_active_initial_hdr;
+	uint16_t	reserved_1;
+	uint16_t	reserved_2;
+} __attribute__((__packed__)) pg_active_program_hdr;
 
 typedef struct {
-	uint8_t		flags;
+	uint8_t		flags_goto;
 	uint8_t		opcode;
-	uint16_t	args;
-} __attribute__((__packed__)) pg_active_instruction_hdr;
+	uint16_t	arg;
+} __attribute__((__packed__)) pg_active_instr_block;
+
+typedef struct {
+	uint16_t	bytecode[][3];
+	uint16_t	codelen;
+	uint16_t 	flags;
+	uint16_t 	fid;
+	uint16_t 	acc_1;
+	uint16_t 	acc_2;
+	uint16_t 	reserved_1;
+	uint16_t 	reserved_2;
+} pg_active_app_t;
 
 typedef struct {
 	uint16_t	fid;
@@ -273,6 +284,8 @@ typedef struct {
 	uint64_t				latency_samples[MAX_DURATION_MS];
 	uint32_t				fidx;
 	flow_t					flows[FLOWS_PER_CORE];
+	uint32_t				elapsed_sec;
+	uint64_t				start_time;
 } activep4_t;
 
 typedef struct port_info_s {
